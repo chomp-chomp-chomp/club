@@ -31,35 +31,180 @@ No scrolling addiction. No engagement bait. No gamification.
 - **Vite + React** - Frontend
 - **Web Push** - Push notifications
 
-## Quick Start
+---
+
+## Deployment Guide (Cloudflare Dashboard)
+
+### Prerequisites
+
+- A Cloudflare account (free tier works)
+- This repository pushed to GitHub
+- Node.js 18+ installed locally
+
+### Step 1: Generate VAPID Keys
+
+Before setting up Cloudflare, generate your push notification keys locally:
+
+```bash
+npm install
+npm run generate-vapid
+```
+
+Save the output - you'll need both keys later:
+```
+VAPID_PUBLIC_KEY=BLxxxxxxxxxxxxxxxx...
+VAPID_PRIVATE_KEY=xxxxxxxxxxxxxxxx...
+```
+
+### Step 2: Create D1 Database
+
+1. Log into [Cloudflare Dashboard](https://dash.cloudflare.com)
+2. Select your account
+3. In the left sidebar, click **Workers & Pages**
+4. Click the **D1** tab
+5. Click **Create database**
+6. Enter name: `club-chomp-db`
+7. Click **Create**
+8. **Copy the Database ID** - you'll need this for `wrangler.toml`
+
+#### Run Database Migrations
+
+1. On your D1 database page, click the **Console** tab
+2. Copy the contents of `schema.sql` from this repo
+3. Paste into the console and click **Execute**
+4. Copy the contents of `seed.sql`
+5. Paste into the console and click **Execute**
+
+This creates all tables and adds an initial admin user with invite code `WELCOME1`.
+
+### Step 3: Create KV Namespace
+
+1. In **Workers & Pages**, click the **KV** tab
+2. Click **Create a namespace**
+3. Enter name: `club-chomp-sessions`
+4. Click **Add**
+5. **Copy the Namespace ID** - you'll need this for `wrangler.toml`
+
+### Step 4: Update Configuration
+
+Edit `wrangler.toml` in your local repo:
+
+```toml
+[[d1_databases]]
+binding = "DB"
+database_name = "club-chomp-db"
+database_id = "paste-your-d1-database-id-here"
+
+[[kv_namespaces]]
+binding = "SESSIONS"
+id = "paste-your-kv-namespace-id-here"
+```
+
+Commit and push this change to GitHub.
+
+### Step 5: Deploy the Worker (API)
+
+1. In **Workers & Pages**, click **Create application**
+2. Click **Create Worker**
+3. Name it `club-chomp-api`
+4. Click **Deploy** (creates a placeholder)
+5. Go to **Settings** → **Variables**
+
+#### Add Environment Variables
+
+Click **Add variable** for each:
+
+| Variable Name | Value |
+|---------------|-------|
+| `VAPID_PUBLIC_KEY` | Your public key from Step 1 |
+| `VAPID_PRIVATE_KEY` | Your private key from Step 1 (click **Encrypt**) |
+| `VAPID_SUBJECT` | `mailto:your-email@example.com` |
+| `RECIPE_API_URL` | `https://chomp-chomp-chomp.github.io/chomp/api/recipes/index.json` |
+| `APP_URL` | `https://club-chomp.pages.dev` (update after Pages deploy) |
+
+#### Bind D1 Database
+
+1. In **Settings** → **Bindings**, click **Add**
+2. Select **D1 database**
+3. Variable name: `DB`
+4. Select your `club-chomp-db` database
+5. Click **Save**
+
+#### Bind KV Namespace
+
+1. Click **Add** again
+2. Select **KV namespace**
+3. Variable name: `SESSIONS`
+4. Select your `club-chomp-sessions` namespace
+5. Click **Save**
+
+#### Deploy Worker Code
+
+For now, you'll need the CLI for the actual Worker deployment:
+
+```bash
+npm run deploy:worker
+```
+
+Or use the **Quick Edit** in the dashboard to paste the bundled worker code.
+
+### Step 6: Deploy Pages (Frontend)
+
+1. In **Workers & Pages**, click **Create application**
+2. Click **Pages** tab, then **Connect to Git**
+3. Select your GitHub repository
+4. Configure build settings:
+   - **Framework preset**: None
+   - **Build command**: `npm run build:pages`
+   - **Build output directory**: `dist`
+5. Click **Save and Deploy**
+
+#### Add Environment Variables (if needed)
+
+Go to **Settings** → **Environment variables** and add:
+
+| Variable | Value |
+|----------|-------|
+| `VITE_API_URL` | Your Worker URL (e.g., `https://club-chomp-api.your-subdomain.workers.dev`) |
+
+### Step 7: Configure Custom Domain (Optional)
+
+1. On your Pages project, go to **Custom domains**
+2. Click **Set up a custom domain**
+3. Enter your domain (e.g., `clubchomp.app`)
+4. Follow DNS configuration instructions
+5. Update `APP_URL` in your Worker environment variables
+
+### Step 8: Connect Pages to Worker
+
+To route `/api/*` requests to your Worker:
+
+1. On your Pages project, go to **Settings** → **Functions**
+2. Under **Routing**, you can configure routes
+
+Alternatively, update your Worker to serve both API and static files, or use a Cloudflare rule to proxy API requests.
+
+---
+
+## Local Development
 
 ```bash
 # Install dependencies
 npm install
 
-# Generate VAPID keys for push notifications
-npm run generate-vapid
-
-# Create Cloudflare resources
-wrangler d1 create club-chomp-db
-wrangler kv:namespace create SESSIONS
-
-# Update wrangler.toml with your database_id and KV namespace_id
-
-# Set secrets
-wrangler secret put VAPID_PUBLIC_KEY
-wrangler secret put VAPID_PRIVATE_KEY
-wrangler secret put VAPID_SUBJECT
-
-# Run migrations
+# Run local D1 migrations
 npm run db:migrate:local
-
-# Seed initial data
 npm run db:seed:local
 
-# Start development
+# Start development servers
 npm run dev
 ```
+
+This runs:
+- Vite dev server on `http://localhost:5173`
+- Worker dev server on `http://localhost:8787`
+
+---
 
 ## Database Schema Summary
 
@@ -127,59 +272,7 @@ npm run dev
 - `POST /api/admin/invite-codes` - Generate invite code
 - `DELETE /api/admin/invite-codes/:id` - Revoke invite code
 
-## Deployment
-
-### 1. Create Cloudflare Resources
-
-```bash
-# Create D1 database
-wrangler d1 create club-chomp-db
-
-# Create KV namespace for sessions
-wrangler kv:namespace create SESSIONS
-```
-
-### 2. Update Configuration
-
-Edit `wrangler.toml` with your database ID and KV namespace ID.
-
-### 3. Set Secrets
-
-```bash
-# Generate VAPID keys
-npm run generate-vapid
-
-# Set secrets
-wrangler secret put VAPID_PUBLIC_KEY
-wrangler secret put VAPID_PRIVATE_KEY
-wrangler secret put VAPID_SUBJECT  # e.g., mailto:admin@clubchomp.app
-```
-
-### 4. Run Migrations
-
-```bash
-# Production
-npm run db:migrate
-
-# Seed data
-npm run db:seed
-```
-
-### 5. Deploy
-
-```bash
-# Deploy Worker API
-npm run deploy:worker
-
-# Deploy Pages frontend
-npm run deploy
-```
-
-### Custom Domain
-
-1. Add custom domain in Cloudflare Pages dashboard
-2. Update `APP_URL` in wrangler.toml
-3. Redeploy
+---
 
 ## iPhone Onboarding Notes
 
@@ -187,7 +280,7 @@ npm run deploy
 2. Welcome screen explains club concept
 3. Guide to Add to Home Screen (required for push)
 4. User opens from Home Screen icon
-5. Enter invite code
+5. Enter invite code (default: `WELCOME1`)
 6. Request notification permission (button-triggered)
 7. Show sample pulses if feed is empty
 
@@ -204,6 +297,8 @@ npm run deploy
 - iOS 16.4+ required for Web Push
 - Check Settings → Notifications → Chomp Club
 - Try "Re-enable notifications" in Settings
+
+---
 
 ## Admin Access
 
@@ -222,6 +317,8 @@ To access: **Settings → Long press version number 5 times → Admin**
 | `/admin/members` | Manage members |
 | `/admin/bulletins` | Moderate board |
 | `/admin/invite-codes` | Generate/revoke codes |
+
+---
 
 ## Navigation Structure
 
