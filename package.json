@@ -1,0 +1,37 @@
+{
+  "name": "club-chomp",
+  "version": "1.0.0",
+  "description": "A calm, curated baking club app",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "db:migrate": "node scripts/migrate.js",
+    "db:seed": "node scripts/seed.js",
+    "generate-vapid": "node scripts/generate-vapid.js"
+  },
+  "dependencies": {
+    "next": "^14.1.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "better-sqlite3": "^9.4.0",
+    "web-push": "^3.6.7",
+    "nanoid": "^5.0.4",
+    "date-fns": "^3.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/react": "^18.2.48",
+    "@types/react-dom": "^18.2.18",
+    "@types/better-sqlite3": "^7.6.8",
+    "@types/web-push": "^3.6.3",
+    "typescript": "^5.3.3",
+    "eslint": "^8.56.0",
+    "eslint-config-next": "^14.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
