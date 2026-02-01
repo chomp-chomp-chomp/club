@@ -3,33 +3,41 @@
   "version": "1.0.0",
   "description": "A calm, curated baking club app",
   "private": true,
+  "type": "module",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint",
-    "db:migrate": "node scripts/migrate.js",
-    "db:seed": "node scripts/seed.js",
-    "generate-vapid": "node scripts/generate-vapid.js"
+    "dev": "concurrently \"npm run dev:worker\" \"npm run dev:pages\"",
+    "dev:worker": "wrangler dev worker/index.ts --port 8787",
+    "dev:pages": "vite",
+    "build": "npm run build:pages && npm run build:worker",
+    "build:pages": "vite build",
+    "build:worker": "wrangler deploy --dry-run --outdir dist-worker",
+    "deploy": "npm run build:pages && wrangler pages deploy dist --project-name club-chomp",
+    "deploy:worker": "wrangler deploy",
+    "db:migrate": "wrangler d1 execute club-chomp-db --file=./schema.sql",
+    "db:migrate:local": "wrangler d1 execute club-chomp-db --local --file=./schema.sql",
+    "db:seed": "wrangler d1 execute club-chomp-db --file=./seed.sql",
+    "db:seed:local": "wrangler d1 execute club-chomp-db --local --file=./seed.sql",
+    "generate-vapid": "node scripts/generate-vapid.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --ext .ts,.tsx"
   },
   "dependencies": {
-    "next": "^14.1.0",
+    "hono": "^4.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "better-sqlite3": "^9.4.0",
-    "web-push": "^3.6.7",
-    "nanoid": "^5.0.4",
-    "date-fns": "^3.3.1"
+    "react-router-dom": "^6.22.0"
   },
   "devDependencies": {
-    "@types/node": "^20.11.0",
+    "@cloudflare/workers-types": "^4.20240117.0",
     "@types/react": "^18.2.48",
     "@types/react-dom": "^18.2.18",
-    "@types/better-sqlite3": "^7.6.8",
-    "@types/web-push": "^3.6.3",
-    "typescript": "^5.3.3",
+    "@vitejs/plugin-react": "^4.2.1",
+    "concurrently": "^8.2.2",
     "eslint": "^8.56.0",
-    "eslint-config-next": "^14.1.0"
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.12",
+    "wrangler": "^3.25.0"
   },
   "engines": {
     "node": ">=18.0.0"

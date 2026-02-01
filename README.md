@@ -2,6 +2,8 @@
 
 A calm, curated baking club app. iPhone-first PWA with push notifications.
 
+**Built on Cloudflare:** Pages + Workers + D1 + KV
+
 ## Philosophy
 
 Club Chomp is **ambient presence**, not conversation.
@@ -22,10 +24,12 @@ No scrolling addiction. No engagement bait. No gamification.
 
 ## Tech Stack
 
-- **Next.js 14** - React framework with App Router
-- **SQLite** - Database (via better-sqlite3)
+- **Cloudflare Pages** - Static frontend hosting
+- **Cloudflare Workers** - API (Hono framework)
+- **Cloudflare D1** - SQLite database
+- **Cloudflare KV** - Session storage
+- **Vite + React** - Frontend
 - **Web Push** - Push notifications
-- **PWA** - Installable on iOS/Android
 
 ## Quick Start
 
@@ -36,17 +40,24 @@ npm install
 # Generate VAPID keys for push notifications
 npm run generate-vapid
 
-# Copy and configure environment
-cp .env.example .env
-# Add VAPID keys to .env
+# Create Cloudflare resources
+wrangler d1 create club-chomp-db
+wrangler kv:namespace create SESSIONS
 
-# Initialize database
-npm run db:migrate
+# Update wrangler.toml with your database_id and KV namespace_id
 
-# Seed initial data (creates admin + invite code)
-npm run db:seed
+# Set secrets
+wrangler secret put VAPID_PUBLIC_KEY
+wrangler secret put VAPID_PRIVATE_KEY
+wrangler secret put VAPID_SUBJECT
 
-# Start development server
+# Run migrations
+npm run db:migrate:local
+
+# Seed initial data
+npm run db:seed:local
+
+# Start development
 npm run dev
 ```
 
@@ -64,7 +75,6 @@ npm run dev
 | `recipes_cache` | Cached recipes from external API |
 | `club_shelf_items` | Curated recipe shelf |
 | `collections` | Recipe collections |
-| `sessions` | Member authentication sessions |
 
 ## API Routes
 
@@ -117,49 +127,59 @@ npm run dev
 - `POST /api/admin/invite-codes` - Generate invite code
 - `DELETE /api/admin/invite-codes/:id` - Revoke invite code
 
-## Push Setup
-
-1. Generate VAPID keys:
-   ```bash
-   npm run generate-vapid
-   ```
-
-2. Add keys to `.env`:
-   ```
-   VAPID_PUBLIC_KEY=your_public_key
-   VAPID_PRIVATE_KEY=your_private_key
-   VAPID_SUBJECT=mailto:admin@yoursite.com
-   ```
-
-3. Push notifications require HTTPS in production.
-
 ## Deployment
 
-### Environment Variables
-
-```env
-DATABASE_PATH=./data/club.db
-VAPID_PUBLIC_KEY=...
-VAPID_PRIVATE_KEY=...
-VAPID_SUBJECT=mailto:admin@clubchomp.app
-RECIPE_API_URL=https://chomp-chomp-chomp.github.io/chomp/api/recipes/index.json
-APP_URL=https://clubchomp.app
-```
-
-### Production Build
+### 1. Create Cloudflare Resources
 
 ```bash
-npm run build
-npm start
+# Create D1 database
+wrangler d1 create club-chomp-db
+
+# Create KV namespace for sessions
+wrangler kv:namespace create SESSIONS
 ```
 
-### Platform Notes
+### 2. Update Configuration
 
-**Vercel**: Works out of the box. Use Vercel KV or external SQLite (Turso).
+Edit `wrangler.toml` with your database ID and KV namespace ID.
 
-**Fly.io**: Good for persistent SQLite. Use volumes for database.
+### 3. Set Secrets
 
-**Railway/Render**: Works with persistent storage for SQLite.
+```bash
+# Generate VAPID keys
+npm run generate-vapid
+
+# Set secrets
+wrangler secret put VAPID_PUBLIC_KEY
+wrangler secret put VAPID_PRIVATE_KEY
+wrangler secret put VAPID_SUBJECT  # e.g., mailto:admin@clubchomp.app
+```
+
+### 4. Run Migrations
+
+```bash
+# Production
+npm run db:migrate
+
+# Seed data
+npm run db:seed
+```
+
+### 5. Deploy
+
+```bash
+# Deploy Worker API
+npm run deploy:worker
+
+# Deploy Pages frontend
+npm run deploy
+```
+
+### Custom Domain
+
+1. Add custom domain in Cloudflare Pages dashboard
+2. Update `APP_URL` in wrangler.toml
+3. Redeploy
 
 ## iPhone Onboarding Notes
 
@@ -191,14 +211,17 @@ Admin panel is hidden by default.
 
 To access: **Settings → Long press version number 5 times → Admin**
 
-### Admin Capabilities
+### Admin Routes
 
-- Drop recipes (from catalog or manual)
-- Send club calls
-- Curate recipe shelf
-- Manage members (enable/disable)
-- Moderate bulletins
-- Generate/revoke invite codes
+| Route | Purpose |
+|-------|---------|
+| `/admin` | Dashboard |
+| `/admin/drop-recipe` | Drop recipes (catalog or manual) |
+| `/admin/club-call` | Send announcements |
+| `/admin/shelf` | Curate recipe shelf |
+| `/admin/members` | Manage members |
+| `/admin/bulletins` | Moderate board |
+| `/admin/invite-codes` | Generate/revoke codes |
 
 ## Navigation Structure
 
@@ -224,13 +247,33 @@ Bottom Tab Bar:
 - Minimal animations
 - No addictive loops
 
-## Documentation
+## Project Structure
 
-See `/docs` folder for detailed guides:
-- [Admin Routes](docs/ADMIN_ROUTES.md)
-- [iPhone Onboarding](docs/IPHONE_ONBOARDING.md)
-- [Push Setup](docs/PUSH_SETUP.md)
-- [Deployment](docs/DEPLOY.md)
+```
+club/
+├── worker/              # Cloudflare Worker API
+│   ├── index.ts         # Main entry point
+│   ├── push.ts          # Web Push implementation
+│   ├── utils.ts         # Utility functions
+│   └── routes/          # API routes
+├── src/                 # Frontend (React + Vite)
+│   ├── App.tsx          # Main app with routing
+│   ├── main.tsx         # Entry point
+│   ├── context/         # React contexts
+│   ├── components/      # Shared components
+│   ├── pages/           # Page components
+│   ├── lib/             # Utilities
+│   └── styles/          # CSS
+├── public/              # Static assets
+│   ├── sw.js            # Service worker
+│   ├── manifest.json    # PWA manifest
+│   └── icons/           # App icons
+├── schema.sql           # D1 database schema
+├── seed.sql             # Initial data
+├── wrangler.toml        # Cloudflare configuration
+├── vite.config.ts       # Vite configuration
+└── package.json
+```
 
 ## License
 
