@@ -4,10 +4,10 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const tabs = [
-  { href: '/', label: 'Home', icon: '🏠' },
-  { href: '/recipes', label: 'Recipes', icon: '📖' },
-  { href: '/bulletin', label: 'Bulletin', icon: '📌' },
-  { href: '/settings', label: 'Settings', icon: '⚙️' },
+  { href: '/', label: 'Home' },
+  { href: '/recipes', label: 'Recipes' },
+  { href: '/bulletin', label: 'Bulletin' },
+  { href: '/settings', label: 'Settings' },
 ];
 
 export default function TabBar() {
@@ -24,7 +24,7 @@ export default function TabBar() {
             href={tab.href}
             className={`tab-item ${isActive ? 'active' : ''}`}
           >
-            <span className="tab-icon">{tab.icon}</span>
+            <span className="tab-icon" aria-hidden="true" />
             {tab.label}
           </Link>
         );

@@ -9,19 +9,19 @@ export default function Layout() {
 
       <nav className="tab-bar">
         <NavLink to="/" className={({ isActive }) => `tab-item ${isActive ? 'active' : ''}`} end>
-          <span className="tab-icon">🏠</span>
+          <span className="tab-icon" aria-hidden="true" />
           <span className="tab-label">Home</span>
         </NavLink>
         <NavLink to="/recipes" className={({ isActive }) => `tab-item ${isActive ? 'active' : ''}`}>
-          <span className="tab-icon">📜</span>
+          <span className="tab-icon" aria-hidden="true" />
           <span className="tab-label">Recipes</span>
         </NavLink>
         <NavLink to="/bulletin" className={({ isActive }) => `tab-item ${isActive ? 'active' : ''}`}>
-          <span className="tab-icon">📋</span>
+          <span className="tab-icon" aria-hidden="true" />
           <span className="tab-label">Bulletin</span>
         </NavLink>
         <NavLink to="/settings" className={({ isActive }) => `tab-item ${isActive ? 'active' : ''}`}>
-          <span className="tab-icon">⚙️</span>
+          <span className="tab-icon" aria-hidden="true" />
           <span className="tab-label">Settings</span>
         </NavLink>
       </nav>

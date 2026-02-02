@@ -58,7 +58,7 @@ export default function ClubCall() {
         <div className="preview-card">
           <h3>Preview</h3>
           <div className="pulse-preview">
-            <span className="pulse-icon">🧺</span>
+            <span className="pulse-icon club_call" aria-hidden="true" />
             <div>
               <div className="pulse-title">Club call</div>
               <div className="pulse-body">{message}</div>
