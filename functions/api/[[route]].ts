@@ -92,67 +92,109 @@ app.use('*', async (c, next) => {
   await next();
 });
 
+// ==================== HEALTH CHECK ====================
+
+app.get('/health', async (c) => {
+  const checks: Record<string, string> = {};
+
+  // Check D1
+  try {
+    await c.env.DB.prepare('SELECT 1').run();
+    checks.d1 = 'ok';
+  } catch (e) {
+    checks.d1 = 'error: ' + (e instanceof Error ? e.message : 'unknown');
+  }
+
+  // Check KV
+  try {
+    await c.env.SESSIONS.get('__health_check__');
+    checks.kv = 'ok';
+  } catch (e) {
+    checks.kv = 'error: ' + (e instanceof Error ? e.message : 'unknown');
+  }
+
+  // Check env vars
+  checks.vapid_public = c.env.VAPID_PUBLIC_KEY ? 'set' : 'missing';
+  checks.vapid_private = c.env.VAPID_PRIVATE_KEY ? 'set' : 'missing';
+  checks.vapid_subject = c.env.VAPID_SUBJECT ? 'set' : 'missing';
+
+  const allOk = checks.d1 === 'ok' && checks.kv === 'ok';
+
+  return c.json({ status: allOk ? 'healthy' : 'unhealthy', checks }, allOk ? 200 : 500);
+});
+
 // ==================== AUTH ROUTES ====================
 
 app.post('/auth/join', async (c) => {
-  const body = await c.req.json<{ invite_code: string; display_name: string }>();
-  const { invite_code, display_name } = body;
+  try {
+    const body = await c.req.json<{ invite_code: string; display_name: string }>();
+    const { invite_code, display_name } = body;
 
-  if (!invite_code || !display_name) {
-    return c.json({ error: 'Invite code and display name required' }, 400);
+    if (!invite_code || !display_name) {
+      return c.json({ error: 'Invite code and display name required' }, 400);
+    }
+
+    const code = invite_code.trim().toUpperCase();
+    const name = display_name.trim().slice(0, 50);
+
+    if (name.length < 1) {
+      return c.json({ error: 'Display name required' }, 400);
+    }
+
+    const inviteCode = await c.env.DB.prepare(
+      'SELECT * FROM invite_codes WHERE code = ? AND is_active = 1'
+    ).bind(code).first();
+
+    if (!inviteCode) {
+      return c.json({ error: 'Invalid invite code' }, 400);
+    }
+
+    if (inviteCode.max_uses && (inviteCode.uses_count as number) >= (inviteCode.max_uses as number)) {
+      return c.json({ error: 'Invite code has been used too many times' }, 400);
+    }
+
+    // Check if this is the first real member (make them admin)
+    const memberCount = await c.env.DB.prepare(
+      "SELECT COUNT(*) as count FROM members WHERE id != 'admin-001'"
+    ).first<{ count: number }>();
+    const isFirstMember = !memberCount || memberCount.count === 0;
+
+    const memberId = generateId();
+    const now = new Date().toISOString();
+
+    await c.env.DB.prepare(`
+      INSERT INTO members (id, display_name, invite_code_id, is_admin, is_active, created_at, last_seen_at)
+      VALUES (?, ?, ?, ?, 1, ?, ?)
+    `).bind(memberId, name, inviteCode.id, isFirstMember ? 1 : 0, now, now).run();
+
+    await c.env.DB.prepare(`
+      INSERT INTO notification_prefs (id, member_id, bake_started, recipe_dropped, club_call)
+      VALUES (?, ?, 0, 1, 1)
+    `).bind(generateId(), memberId).run();
+
+    await c.env.DB.prepare(
+      'UPDATE invite_codes SET uses_count = uses_count + 1 WHERE id = ?'
+    ).bind(inviteCode.id).run();
+
+    const sessionId = generateSessionId();
+    await c.env.SESSIONS.put(sessionId, JSON.stringify({
+      memberId,
+      isAdmin: isFirstMember,
+    }), { expirationTtl: 60 * 60 * 24 * 30 });
+
+    setCookie(c, 'session', sessionId, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'Lax',
+      maxAge: 60 * 60 * 24 * 30,
+      path: '/',
+    });
+
+    return c.json({ success: true, member_id: memberId, is_admin: isFirstMember });
+  } catch (err) {
+    console.error('Join error:', err);
+    return c.json({ error: 'Failed to join. Check D1 database bindings and schema.' }, 500);
   }
-
-  const code = invite_code.trim().toUpperCase();
-  const name = display_name.trim().slice(0, 50);
-
-  if (name.length < 1) {
-    return c.json({ error: 'Display name required' }, 400);
-  }
-
-  const inviteCode = await c.env.DB.prepare(
-    'SELECT * FROM invite_codes WHERE code = ? AND is_active = 1'
-  ).bind(code).first();
-
-  if (!inviteCode) {
-    return c.json({ error: 'Invalid invite code' }, 400);
-  }
-
-  if (inviteCode.max_uses && (inviteCode.uses_count as number) >= (inviteCode.max_uses as number)) {
-    return c.json({ error: 'Invite code has been used too many times' }, 400);
-  }
-
-  const memberId = generateId();
-  const now = new Date().toISOString();
-
-  await c.env.DB.prepare(`
-    INSERT INTO members (id, display_name, invite_code_id, is_admin, is_active, created_at, last_seen_at)
-    VALUES (?, ?, ?, 0, 1, ?, ?)
-  `).bind(memberId, name, inviteCode.id, now, now).run();
-
-  await c.env.DB.prepare(`
-    INSERT INTO notification_prefs (id, member_id, bake_started, recipe_dropped, club_call)
-    VALUES (?, ?, 0, 1, 1)
-  `).bind(generateId(), memberId).run();
-
-  await c.env.DB.prepare(
-    'UPDATE invite_codes SET uses_count = uses_count + 1 WHERE id = ?'
-  ).bind(inviteCode.id).run();
-
-  const sessionId = generateSessionId();
-  await c.env.SESSIONS.put(sessionId, JSON.stringify({
-    memberId,
-    isAdmin: false,
-  }), { expirationTtl: 60 * 60 * 24 * 30 });
-
-  setCookie(c, 'session', sessionId, {
-    httpOnly: true,
-    secure: true,
-    sameSite: 'Lax',
-    maxAge: 60 * 60 * 24 * 30,
-    path: '/',
-  });
-
-  return c.json({ success: true, member_id: memberId });
 });
 
 app.get('/auth/me', async (c) => {
