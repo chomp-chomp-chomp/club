@@ -15,9 +15,9 @@ interface PulseCardProps {
 }
 
 const pulseConfig = {
-  bake_started: { icon: '🟠', label: 'started baking' },
-  recipe_dropped: { icon: '📜', label: 'New recipe dropped' },
-  club_call: { icon: '🧺', label: 'Club call' },
+  bake_started: { label: 'started baking' },
+  recipe_dropped: { label: 'New recipe dropped' },
+  club_call: { label: 'Club call' },
 };
 
 export default function PulseCard({ pulse }: PulseCardProps) {
@@ -26,7 +26,7 @@ export default function PulseCard({ pulse }: PulseCardProps) {
   return (
     <article className="card">
       <div className="card-header">
-        <span className={`pulse-icon ${pulse.type}`}>{config.icon}</span>
+        <span className={`pulse-icon ${pulse.type}`} aria-hidden="true" />
         <div>
           <div className="card-title">
             {pulse.type === 'bake_started' && pulse.member_name
