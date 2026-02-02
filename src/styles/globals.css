@@ -1,13 +1,15 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Source+Sans+3:wght@300;400;500;600&display=swap');
+
 :root {
-  --color-bg: #faf9f7;
+  --color-bg: #fbf7f4;
   --color-surface: #ffffff;
-  --color-text: #2c2c2c;
-  --color-text-muted: #6b6b6b;
-  --color-border: #e5e5e5;
-  --color-accent: #d97706;
-  --color-accent-muted: #fef3c7;
-  --color-success: #059669;
-  --color-error: #dc2626;
+  --color-text: #2b2727;
+  --color-text-muted: #6b6363;
+  --color-border: #ebe1dc;
+  --color-accent: #e73b42;
+  --color-accent-muted: #ffe5e7;
+  --color-success: #0f916a;
+  --color-error: #c42f37;
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
@@ -16,8 +18,10 @@
   --spacing-md: 16px;
   --spacing-lg: 24px;
   --spacing-xl: 32px;
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-sans: 'Inter', 'Source Sans 3', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    sans-serif;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --breakpoint-mobile: 768px;
 }
 
 * {
@@ -373,8 +377,15 @@ input:focus, textarea:focus, select:focus {
 }
 
 .tab-icon {
-  font-size: 1.5rem;
-  margin-bottom: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--color-border);
+  margin-bottom: 6px;
+}
+
+.tab-item.active .tab-icon {
+  background: var(--color-accent);
 }
 
 .tab-label {
@@ -384,13 +395,28 @@ input:focus, textarea:focus, select:focus {
 /* Pulse Card */
 .pulse-card {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--spacing-md);
 }
 
 .pulse-icon {
-  font-size: 1.25rem;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--color-border);
   flex-shrink: 0;
+}
+
+.pulse-icon.bake_started {
+  background: var(--color-accent);
+}
+
+.pulse-icon.recipe_dropped {
+  background: #f08d1e;
+}
+
+.pulse-icon.club_call {
+  background: #5b4ce6;
 }
 
 .pulse-content {
@@ -727,7 +753,7 @@ input:focus, textarea:focus, select:focus {
 .pulse-preview {
   display: flex;
   gap: var(--spacing-md);
-  align-items: flex-start;
+  align-items: center;
 }
 
 /* Select */
@@ -743,11 +769,20 @@ input:focus, textarea:focus, select:focus {
 /* Dark mode */
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-bg: #1a1a1a;
-    --color-surface: #2a2a2a;
-    --color-text: #f5f5f5;
-    --color-text-muted: #9a9a9a;
-    --color-border: #3a3a3a;
-    --color-accent-muted: #422006;
+    --color-bg: #231f1f;
+    --color-surface: #2f2a2a;
+    --color-text: #f7f1f1;
+    --color-text-muted: #c7bdbd;
+    --color-border: #3b3535;
+    --color-accent: #ff6b7a;
+    --color-accent-muted: #3a2427;
+    --color-success: #35c38f;
+    --color-error: #ff5d67;
+  }
+}
+
+@media (max-width: 768px) {
+  .container {
+    padding: var(--spacing-md) var(--spacing-sm);
   }
 }

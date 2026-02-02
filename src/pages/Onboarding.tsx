@@ -235,7 +235,6 @@ export default function Onboarding() {
 
       {step === 'complete' && (
         <div className="onboarding-step">
-          <div style={{ fontSize: '3rem', marginBottom: '16px' }}>🧁</div>
           <h1 className="onboarding-title">You are in!</h1>
           <p className="onboarding-subtitle">
             Welcome to the club. Happy baking!

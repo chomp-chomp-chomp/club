@@ -11,12 +11,6 @@ interface Pulse {
   created_at: string;
 }
 
-const PULSE_ICONS = {
-  bake_started: '🟠',
-  recipe_dropped: '📜',
-  club_call: '🧺',
-};
-
 export default function Home() {
   const [pulses, setPulses] = useState<Pulse[]>([]);
   const [loading, setLoading] = useState(true);
@@ -71,7 +65,7 @@ export default function Home() {
         <div className="pulse-list">
           {pulses.map((pulse) => (
             <div key={pulse.id} className="card pulse-card">
-              <div className="pulse-icon">{PULSE_ICONS[pulse.type]}</div>
+              <div className={`pulse-icon ${pulse.type}`} aria-hidden="true" />
               <div className="pulse-content">
                 <div className="pulse-title">{pulse.title}</div>
                 {pulse.body && <div className="pulse-body">{pulse.body}</div>}
