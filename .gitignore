@@ -1,26 +1,21 @@
 # Dependencies
 node_modules/
-.pnp
-.pnp.js
 
-# Build
-.next/
-out/
-build/
+# Build output
 dist/
+dist-worker/
 
-# Database
-*.db
-*.sqlite
-*.sqlite3
-data/
+# Wrangler
+.wrangler/
+.dev.vars
+
+# Local D1 database
+.wrangler/state/
 
 # Environment
 .env
 .env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*.local
 
 # Logs
 npm-debug.log*

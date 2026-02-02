@@ -1,0 +1,14 @@
+# Local development variables for Wrangler
+# Copy to .dev.vars and fill in values
+
+# VAPID Keys for Web Push
+# Generate with: npm run generate-vapid
+VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+VAPID_SUBJECT=mailto:admin@clubchomp.app
+
+# External recipe API
+RECIPE_API_URL=https://chomp-chomp-chomp.github.io/chomp/api/recipes/index.json
+
+# App URL (your Pages URL)
+APP_URL=http://localhost:5173
