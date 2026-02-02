@@ -2,7 +2,7 @@
 
 A calm, curated baking club app. iPhone-first PWA with push notifications.
 
-**Built on Cloudflare:** Pages + Workers + D1 + KV
+**Built on Cloudflare:** Pages (with Functions) + D1 + KV
 
 ## Philosophy
 
@@ -24,37 +24,30 @@ No scrolling addiction. No engagement bait. No gamification.
 
 ## Tech Stack
 
-- **Cloudflare Pages** - Static frontend hosting
-- **Cloudflare Workers** - API (Hono framework)
+- **Cloudflare Pages** - Frontend + API (via Pages Functions)
 - **Cloudflare D1** - SQLite database
 - **Cloudflare KV** - Session storage
+- **Hono** - API framework
 - **Vite + React** - Frontend
 - **Web Push** - Push notifications
 
 ---
 
-## Deployment Guide (Cloudflare Dashboard)
+## Deployment Guide (No CLI Required)
+
+This guide uses **only the Cloudflare Dashboard** - no local development environment needed.
 
 ### Prerequisites
 
 - A Cloudflare account (free tier works)
-- This repository pushed to GitHub
-- Node.js 18+ installed locally
+- A GitHub account
+- This repository forked to your GitHub
 
-### Step 1: Generate VAPID Keys
+### Step 1: Fork the Repository
 
-Before setting up Cloudflare, generate your push notification keys locally:
-
-```bash
-npm install
-npm run generate-vapid
-```
-
-Save the output - you'll need both keys later:
-```
-VAPID_PUBLIC_KEY=BLxxxxxxxxxxxxxxxx...
-VAPID_PRIVATE_KEY=xxxxxxxxxxxxxxxx...
-```
+1. Go to this repository on GitHub
+2. Click **Fork** in the top right
+3. This creates a copy in your GitHub account
 
 ### Step 2: Create D1 Database
 
@@ -65,9 +58,8 @@ VAPID_PRIVATE_KEY=xxxxxxxxxxxxxxxx...
 5. Click **Create database**
 6. Enter name: `club-chomp-db`
 7. Click **Create**
-8. **Copy the Database ID** - you'll need this for `wrangler.toml`
 
-#### Run Database Migrations
+#### Run Database Setup
 
 1. On your D1 database page, click the **Console** tab
 2. Copy the contents of `schema.sql` from this repo
@@ -83,126 +75,118 @@ This creates all tables and adds an initial admin user with invite code `WELCOME
 2. Click **Create a namespace**
 3. Enter name: `club-chomp-sessions`
 4. Click **Add**
-5. **Copy the Namespace ID** - you'll need this for `wrangler.toml`
 
-### Step 4: Update Configuration
+### Step 4: Deploy Pages (Frontend + API)
 
-Edit `wrangler.toml` in your local repo:
-
-```toml
-[[d1_databases]]
-binding = "DB"
-database_name = "club-chomp-db"
-database_id = "paste-your-d1-database-id-here"
-
-[[kv_namespaces]]
-binding = "SESSIONS"
-id = "paste-your-kv-namespace-id-here"
-```
-
-Commit and push this change to GitHub.
-
-### Step 5: Deploy the Worker (API)
-
-1. In **Workers & Pages**, click **Create application**
-2. Click **Create Worker**
-3. Name it `club-chomp-api`
-4. Click **Deploy** (creates a placeholder)
-5. Go to **Settings** → **Variables**
-
-#### Add Environment Variables
-
-Click **Add variable** for each:
-
-| Variable Name | Value |
-|---------------|-------|
-| `VAPID_PUBLIC_KEY` | Your public key from Step 1 |
-| `VAPID_PRIVATE_KEY` | Your private key from Step 1 (click **Encrypt**) |
-| `VAPID_SUBJECT` | `mailto:your-email@example.com` |
-| `RECIPE_API_URL` | `https://chomp-chomp-chomp.github.io/chomp/api/recipes/index.json` |
-| `APP_URL` | `https://club-chomp.pages.dev` (update after Pages deploy) |
-
-#### Bind D1 Database
-
-1. In **Settings** → **Bindings**, click **Add**
-2. Select **D1 database**
-3. Variable name: `DB`
-4. Select your `club-chomp-db` database
-5. Click **Save**
-
-#### Bind KV Namespace
-
-1. Click **Add** again
-2. Select **KV namespace**
-3. Variable name: `SESSIONS`
-4. Select your `club-chomp-sessions` namespace
-5. Click **Save**
-
-#### Deploy Worker Code
-
-For now, you'll need the CLI for the actual Worker deployment:
-
-```bash
-npm run deploy:worker
-```
-
-Or use the **Quick Edit** in the dashboard to paste the bundled worker code.
-
-### Step 6: Deploy Pages (Frontend)
-
-1. In **Workers & Pages**, click **Create application**
+1. In **Workers & Pages**, click **Create**
 2. Click **Pages** tab, then **Connect to Git**
-3. Select your GitHub repository
-4. Configure build settings:
+3. Authorize Cloudflare to access your GitHub if prompted
+4. Select your forked `club` repository
+5. Configure build settings:
    - **Framework preset**: None
-   - **Build command**: `npm run build:pages`
+   - **Build command**: `npm run build`
    - **Build output directory**: `dist`
-5. Click **Save and Deploy**
+6. Click **Save and Deploy**
 
-#### Add Environment Variables (if needed)
+Wait for the first deployment to complete. It will fail to work properly until you add the bindings in the next steps, but that's fine.
 
-Go to **Settings** → **Environment variables** and add:
+### Step 5: Configure Bindings
 
-| Variable | Value |
-|----------|-------|
-| `VITE_API_URL` | Your Worker URL (e.g., `https://club-chomp-api.your-subdomain.workers.dev`) |
+After deployment, configure the D1 and KV bindings:
 
-### Step 7: Configure Custom Domain (Optional)
+1. Go to your Pages project
+2. Click **Settings** → **Functions**
+3. Scroll down to **D1 database bindings**
+4. Click **Add binding**
+   - Variable name: `DB`
+   - D1 database: Select `club-chomp-db`
+5. Scroll to **KV namespace bindings**
+6. Click **Add binding**
+   - Variable name: `SESSIONS`
+   - KV namespace: Select `club-chomp-sessions`
+7. Click **Save**
 
-1. On your Pages project, go to **Custom domains**
-2. Click **Set up a custom domain**
-3. Enter your domain (e.g., `clubchomp.app`)
-4. Follow DNS configuration instructions
-5. Update `APP_URL` in your Worker environment variables
+### Step 6: Add Environment Variables
 
-### Step 8: Connect Pages to Worker
+1. Still in **Settings**, click **Environment variables**
+2. Click **Add variable** for each:
 
-To route `/api/*` requests to your Worker:
+| Variable Name | Value | Notes |
+|---------------|-------|-------|
+| `VAPID_PUBLIC_KEY` | (see below) | For push notifications |
+| `VAPID_PRIVATE_KEY` | (see below) | Click **Encrypt** |
+| `VAPID_SUBJECT` | `mailto:your-email@example.com` | Your email |
+| `RECIPE_API_URL` | `https://chomp-chomp-chomp.github.io/chomp/api/recipes/index.json` | Recipe source |
+| `APP_URL` | Your Pages URL | e.g., `https://club-chomp.pages.dev` |
 
-1. On your Pages project, go to **Settings** → **Functions**
-2. Under **Routing**, you can configure routes
+3. Click **Save**
 
-Alternatively, update your Worker to serve both API and static files, or use a Cloudflare rule to proxy API requests.
+#### Generating VAPID Keys
+
+If you have Node.js locally, run:
+```bash
+npx web-push generate-vapid-keys
+```
+
+Or use an online VAPID key generator (search "VAPID key generator").
+
+You need:
+- **Public Key**: Goes in `VAPID_PUBLIC_KEY`
+- **Private Key**: Goes in `VAPID_PRIVATE_KEY` (mark as encrypted)
+
+### Step 7: Redeploy
+
+After adding bindings and variables, trigger a new deployment:
+
+1. Go to your Pages project **Deployments** tab
+2. Click the **...** menu on the latest deployment
+3. Click **Retry deployment**
+
+Or push any change to your forked repo to trigger a new build.
+
+### Step 8: Test the App
+
+1. Visit your Pages URL (e.g., `https://club-chomp.pages.dev`)
+2. You should see the welcome/onboarding screen
+3. Use invite code `WELCOME1` to join
+4. The first user is automatically an admin
 
 ---
 
-## Local Development
+## How It Works
 
-```bash
-# Install dependencies
-npm install
+### Pages Functions
 
-# Run local D1 migrations
-npm run db:migrate:local
-npm run db:seed:local
+The API runs as **Cloudflare Pages Functions**. The file `functions/api/[[route]].ts` handles all `/api/*` requests using the Hono framework.
 
-# Start development servers
-npm run dev
+When you push to GitHub:
+1. Cloudflare Pages builds the frontend with Vite
+2. Pages Functions are automatically deployed alongside
+3. No separate Worker deployment needed
+
+### Project Structure
+
 ```
-
-This runs:
-- Vite dev server on `http://localhost:5173`
-- Worker dev server on `http://localhost:8787`
+club/
+├── functions/           # Cloudflare Pages Functions
+│   └── api/
+│       └── [[route]].ts # All API routes (Hono)
+├── src/                 # Frontend (React + Vite)
+│   ├── App.tsx          # Main app with routing
+│   ├── main.tsx         # Entry point
+│   ├── context/         # React contexts
+│   ├── components/      # Shared components
+│   ├── pages/           # Page components
+│   ├── lib/             # Utilities
+│   └── styles/          # CSS
+├── public/              # Static assets
+│   ├── sw.js            # Service worker
+│   ├── manifest.json    # PWA manifest
+│   └── icons/           # App icons
+├── schema.sql           # D1 database schema
+├── seed.sql             # Initial data
+└── package.json
+```
 
 ---
 
@@ -344,33 +328,31 @@ Bottom Tab Bar:
 - Minimal animations
 - No addictive loops
 
-## Project Structure
+---
 
+## Local Development (Optional)
+
+If you want to develop locally:
+
+```bash
+# Clone your fork
+git clone https://github.com/YOUR_USERNAME/club.git
+cd club
+
+# Install dependencies
+npm install
+
+# Create .dev.vars from example
+cp .dev.vars.example .dev.vars
+# Edit .dev.vars with your VAPID keys
+
+# Start dev server
+npm run dev
 ```
-club/
-├── worker/              # Cloudflare Worker API
-│   ├── index.ts         # Main entry point
-│   ├── push.ts          # Web Push implementation
-│   ├── utils.ts         # Utility functions
-│   └── routes/          # API routes
-├── src/                 # Frontend (React + Vite)
-│   ├── App.tsx          # Main app with routing
-│   ├── main.tsx         # Entry point
-│   ├── context/         # React contexts
-│   ├── components/      # Shared components
-│   ├── pages/           # Page components
-│   ├── lib/             # Utilities
-│   └── styles/          # CSS
-├── public/              # Static assets
-│   ├── sw.js            # Service worker
-│   ├── manifest.json    # PWA manifest
-│   └── icons/           # App icons
-├── schema.sql           # D1 database schema
-├── seed.sql             # Initial data
-├── wrangler.toml        # Cloudflare configuration
-├── vite.config.ts       # Vite configuration
-└── package.json
-```
+
+Note: Local D1 development requires Wrangler CLI. The dashboard-only approach above is simpler for deployment.
+
+---
 
 ## License
 
