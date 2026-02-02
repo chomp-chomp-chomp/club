@@ -1,13 +1,16 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Source+Sans+3:wght@300;400;500;600&display=swap');
 
 :root {
-  --color-bg: #fbf7f4;
+  --color-bg: #fdfdfd;
   --color-surface: #ffffff;
-  --color-text: #2b2727;
-  --color-text-muted: #6b6363;
-  --color-border: #ebe1dc;
+  --color-text: #353535;
+  --color-text-muted: #7d7d7d;
+  --color-text-light: #9d9d9d;
+  --color-border: #e0e0e0;
   --color-accent: #e73b42;
+  --color-accent-hover: #d12d34;
   --color-accent-muted: #ffe5e7;
+  --color-sidebar-bg: #f5f5f5;
   --color-success: #0f916a;
   --color-error: #c42f37;
   --radius-sm: 8px;
@@ -137,7 +140,7 @@ input:focus, textarea:focus, select:focus {
 }
 
 .btn-primary:hover:not(:disabled) {
-  opacity: 0.9;
+  background: var(--color-accent-hover);
 }
 
 .btn-secondary {
@@ -147,7 +150,7 @@ input:focus, textarea:focus, select:focus {
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background: var(--color-bg);
+  background: var(--color-sidebar-bg);
 }
 
 .btn-large {
@@ -771,11 +774,14 @@ input:focus, textarea:focus, select:focus {
   :root {
     --color-bg: #231f1f;
     --color-surface: #2f2a2a;
-    --color-text: #f7f1f1;
-    --color-text-muted: #c7bdbd;
-    --color-border: #3b3535;
+    --color-text: #d9d4d4;
+    --color-text-muted: #b9b4b4;
+    --color-text-light: #948f8f;
+    --color-border: #3b3636;
     --color-accent: #ff6b7a;
+    --color-accent-hover: #ff8590;
     --color-accent-muted: #3a2427;
+    --color-sidebar-bg: #2b2626;
     --color-success: #35c38f;
     --color-error: #ff5d67;
   }
