@@ -1,6 +1,4 @@
-'use client';
-
-import { formatRelativeTime } from '@/lib/utils';
+import { formatRelativeTime } from '../lib/api';
 
 interface PulseCardProps {
   pulse: {

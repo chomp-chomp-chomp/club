@@ -8,7 +8,6 @@ export default function Settings() {
   const { member, refresh, logout } = useAuth();
   const [displayName, setDisplayName] = useState(member?.display_name || '');
   const [saving, setSaving] = useState(false);
-  const [versionPressCount, setVersionPressCount] = useState(0);
 
   const prefs = member?.notification_prefs || {
     bake_started: false,
@@ -89,15 +88,6 @@ export default function Settings() {
     if (!confirm('Are you sure you want to leave the club?')) return;
     await logout();
     navigate('/onboarding');
-  };
-
-  const handleVersionPress = () => {
-    const newCount = versionPressCount + 1;
-    setVersionPressCount(newCount);
-
-    if (newCount >= 5 && member?.is_admin) {
-      navigate('/admin');
-    }
   };
 
   return (
@@ -188,6 +178,16 @@ export default function Settings() {
         </Link>
       </section>
 
+      {member?.is_admin && (
+        <section className="section">
+          <h2 className="section-title">Admin</h2>
+          <Link to="/admin" className="card" style={{ display: 'block', textDecoration: 'none', color: 'inherit' }}>
+            <div className="card-title">Admin Panel</div>
+            <div className="card-meta">Manage club, recipes, members</div>
+          </Link>
+        </section>
+      )}
+
       <section className="section">
         <button
           className="btn btn-secondary"
@@ -198,19 +198,9 @@ export default function Settings() {
         </button>
       </section>
 
-      <footer style={{ textAlign: 'center', padding: '24px', color: 'var(--color-text-muted)' }}>
-        <button
-          onClick={handleVersionPress}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: 'inherit',
-            cursor: 'default',
-            padding: '8px',
-          }}
-        >
-          Version 1.0.0
-        </button>
+      <footer style={{ textAlign: 'center', padding: '24px', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
+        <div>Version 1.0.0</div>
+        {member?.is_admin && <div style={{ marginTop: '4px' }}>Admin</div>}
       </footer>
     </div>
   );

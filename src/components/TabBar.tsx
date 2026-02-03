@@ -1,7 +1,4 @@
-'use client';
-
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { NavLink } from 'react-router-dom';
 
 const tabs = [
   { href: '/', label: 'Home' },
@@ -11,24 +8,19 @@ const tabs = [
 ];
 
 export default function TabBar() {
-  const pathname = usePathname();
-
   return (
     <nav className="tab-bar">
-      {tabs.map((tab) => {
-        const isActive =
-          tab.href === '/' ? pathname === '/' : pathname.startsWith(tab.href);
-        return (
-          <Link
-            key={tab.href}
-            href={tab.href}
-            className={`tab-item ${isActive ? 'active' : ''}`}
-          >
-            <span className="tab-icon" aria-hidden="true" />
-            {tab.label}
-          </Link>
-        );
-      })}
+      {tabs.map((tab) => (
+        <NavLink
+          key={tab.href}
+          to={tab.href}
+          className={({ isActive }) => `tab-item ${isActive ? 'active' : ''}`}
+          end={tab.href === '/'}
+        >
+          <span className="tab-icon" aria-hidden="true" />
+          <span className="tab-label">{tab.label}</span>
+        </NavLink>
+      ))}
     </nav>
   );
 }
