@@ -874,12 +874,31 @@ app.post('/recipes/cache', async (c) => {
   const apiUrl = c.env.RECIPE_API_URL || 'https://chompchomp.cc/data/recipes.json';
 
   try {
-    const response = await fetch(apiUrl);
+    const response = await fetch(apiUrl, {
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'club-cache/1.0',
+      },
+    });
+    const responseText = await response.text();
     if (!response.ok) {
-      return c.json({ error: 'Failed to fetch recipes from external API' }, 502);
+      return c.json({
+        error: 'Failed to fetch recipes from external API',
+        status: response.status,
+        body: responseText.slice(0, 200),
+      }, 502);
     }
 
-    const rawRecipes = await response.json() as any;
+    let rawRecipes: any;
+    try {
+      rawRecipes = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('Recipe payload parse error:', parseError);
+      return c.json({
+        error: 'Failed to parse recipes payload',
+        body: responseText.slice(0, 200),
+      }, 502);
+    }
     const recipes = Array.isArray(rawRecipes)
       ? rawRecipes
       : rawRecipes?.recipes || rawRecipes?.items || rawRecipes?.data || [];
