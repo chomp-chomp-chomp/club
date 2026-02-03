@@ -32,6 +32,10 @@ export default function Admin() {
           <div className="card-title">Members</div>
           <div className="card-meta">View and manage club members</div>
         </Link>
+        <Link to="/admin/activity" className="card admin-link">
+          <div className="card-title">Activity</div>
+          <div className="card-meta">View and delete all pulses</div>
+        </Link>
         <Link to="/admin/bulletins" className="card admin-link">
           <div className="card-title">Bulletins</div>
           <div className="card-meta">Moderate bulletin posts</div>
