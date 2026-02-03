@@ -16,6 +16,7 @@ import AdminShelf from './pages/admin/Shelf';
 import AdminMembers from './pages/admin/Members';
 import AdminBulletins from './pages/admin/Bulletins';
 import AdminInviteCodes from './pages/admin/InviteCodes';
+import AdminActivity from './pages/admin/Activity';
 import MagicLink from './pages/MagicLink';
 import { initSoundHandler, addPendingSound } from './lib/sounds';
 
@@ -122,6 +123,14 @@ function AppRoutes() {
         element={
           <AdminRoute>
             <AdminInviteCodes />
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="/admin/activity"
+        element={
+          <AdminRoute>
+            <AdminActivity />
           </AdminRoute>
         }
       />

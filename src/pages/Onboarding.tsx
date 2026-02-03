@@ -255,7 +255,7 @@ export default function Onboarding() {
                   type="text"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
-                  placeholder="How should we call you?"
+                  placeholder="What should we call you?"
                   maxLength={50}
                 />
               </div>

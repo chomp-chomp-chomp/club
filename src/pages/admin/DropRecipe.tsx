@@ -1,11 +1,20 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { api } from '../../lib/api';
+import { api, formatRelativeTime } from '../../lib/api';
 
 interface CachedRecipe {
   slug: string;
   title: string;
   url: string;
+}
+
+interface RecipeDrop {
+  id: string;
+  title: string;
+  body: string | null;
+  url: string | null;
+  member_name: string;
+  created_at: string;
 }
 
 type Tab = 'catalog' | 'manual';
@@ -21,6 +30,19 @@ export default function DropRecipe() {
   const [dropping, setDropping] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [message, setMessage] = useState('');
+  const [recentDrops, setRecentDrops] = useState<RecipeDrop[]>([]);
+  const [loadingDrops, setLoadingDrops] = useState(true);
+
+  const loadRecentDrops = async () => {
+    try {
+      const data = await api<RecipeDrop[]>('/api/admin/recipe-drops');
+      setRecentDrops(data);
+    } catch (error) {
+      console.error('Failed to load recent drops:', error);
+    } finally {
+      setLoadingDrops(false);
+    }
+  };
 
   const searchRecipes = async () => {
     try {
@@ -61,6 +83,7 @@ export default function DropRecipe() {
         setMessage(`Dropped: ${selectedRecipe.title}`);
         setSelectedRecipe(null);
         setNotes('');
+        await loadRecentDrops();
       } else if (tab === 'manual' && customTitle) {
         await api('/api/admin/drop-recipe', {
           method: 'POST',
@@ -74,6 +97,7 @@ export default function DropRecipe() {
         setCustomTitle('');
         setCustomUrl('');
         setNotes('');
+        await loadRecentDrops();
       }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Failed to drop recipe');
@@ -81,6 +105,21 @@ export default function DropRecipe() {
       setDropping(false);
     }
   };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Delete this recipe drop?')) return;
+
+    try {
+      await api(`/api/admin/recipe-drops/${id}`, { method: 'DELETE' });
+      await loadRecentDrops();
+    } catch (error) {
+      console.error('Failed to delete:', error);
+    }
+  };
+
+  useEffect(() => {
+    loadRecentDrops();
+  }, []);
 
   useEffect(() => {
     if (search.length >= 2) {
@@ -232,6 +271,40 @@ export default function DropRecipe() {
           </button>
         </>
       )}
+
+      <section style={{ marginTop: '32px' }}>
+        <h2 className="section-title">Recent Recipe Drops</h2>
+        {loadingDrops ? (
+          <div className="empty-state">Loading...</div>
+        ) : recentDrops.length === 0 ? (
+          <div className="empty-state">No recipe drops yet</div>
+        ) : (
+          <div className="drops-list">
+            {recentDrops.map((drop) => (
+              <div key={drop.id} className="card" style={{ marginBottom: '8px' }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 500 }}>{drop.title}</div>
+                  {drop.body && (
+                    <div className="text-muted" style={{ fontSize: '0.9rem', marginTop: '4px' }}>
+                      {drop.body}
+                    </div>
+                  )}
+                  <div className="text-muted" style={{ fontSize: '0.85rem', marginTop: '4px' }}>
+                    {drop.member_name} - {formatRelativeTime(drop.created_at)}
+                  </div>
+                </div>
+                <button
+                  className="btn-icon danger"
+                  onClick={() => handleDelete(drop.id)}
+                  style={{ marginLeft: '8px' }}
+                >
+                  Delete
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }
