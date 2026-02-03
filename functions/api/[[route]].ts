@@ -883,6 +883,13 @@ app.post('/recipes/cache', async (c) => {
     let updated = 0;
 
     for (const recipe of recipes) {
+      const slug = recipe.slug || recipe.id;
+      if (!slug) {
+        continue;
+      }
+
+      const url = recipe.url || `https://chompchomp.cc/recipe?slug=${encodeURIComponent(slug)}`;
+
       await c.env.DB.prepare(`
         INSERT INTO recipes_cache (slug, title, url, tags, excerpt, updated_at, cached_at)
         VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -894,9 +901,9 @@ app.post('/recipes/cache', async (c) => {
           updated_at = excluded.updated_at,
           cached_at = excluded.cached_at
       `).bind(
-        recipe.slug,
+        slug,
         recipe.title,
-        recipe.url,
+        url,
         JSON.stringify(recipe.tags || []),
         recipe.excerpt || null,
         recipe.updated_at || null,

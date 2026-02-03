@@ -121,6 +121,8 @@ After deployment, configure the D1 and KV bindings:
 
 3. Click **Save**
 
+If the recipe feed does not include a `url`, the cache refresh will construct one using the recipe `id` or `slug` (`https://chompchomp.cc/recipe?slug=<id>`).
+
 #### Generating VAPID Keys
 
 If you have Node.js locally, run:
