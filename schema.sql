@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS invite_codes (
   max_uses INTEGER,
   uses_count INTEGER DEFAULT 0,
   is_active INTEGER DEFAULT 1,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  email TEXT
 );
 
 -- Push subscriptions table

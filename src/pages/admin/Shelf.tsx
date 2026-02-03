@@ -6,7 +6,9 @@ interface ShelfItem {
   id: string;
   recipe_slug: string | null;
   custom_title: string | null;
+  custom_url: string | null;
   cached_title: string | null;
+  cached_url: string | null;
   is_featured: number;
 }
 
@@ -27,18 +29,26 @@ interface CachedRecipe {
   url: string;
 }
 
+type AddMode = 'search' | 'manual';
+
 export default function Shelf() {
   const [shelf, setShelf] = useState<ShelfData | null>(null);
   const [collections, setCollections] = useState<Collection[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showCollectionModal, setShowCollectionModal] = useState(false);
+  const [addMode, setAddMode] = useState<AddMode>('manual');
   const [search, setSearch] = useState('');
   const [recipes, setRecipes] = useState<CachedRecipe[]>([]);
+  const [searchDone, setSearchDone] = useState(false);
   const [addToCollection, setAddToCollection] = useState('');
   const [addAsFeatured, setAddAsFeatured] = useState(false);
+  const [customTitle, setCustomTitle] = useState('');
+  const [customUrl, setCustomUrl] = useState('');
   const [newCollectionName, setNewCollectionName] = useState('');
   const [error, setError] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+  const [cacheCount, setCacheCount] = useState<number | null>(null);
 
   const loadData = async () => {
     try {
@@ -55,20 +65,47 @@ export default function Shelf() {
     }
   };
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const searchRecipes = async () => {
+  const checkCache = async () => {
     try {
-      const data = await api<CachedRecipe[]>(`/api/recipes/cache?search=${encodeURIComponent(search)}`);
-      setRecipes(data);
+      const data = await api<CachedRecipe[]>('/api/recipes/cache?search=');
+      setCacheCount(data.length);
     } catch {
-      // ignore
+      setCacheCount(0);
     }
   };
 
-  const addToShelf = async (recipe: CachedRecipe) => {
+  useEffect(() => {
+    loadData();
+    checkCache();
+  }, []);
+
+  const refreshCache = async () => {
+    setRefreshing(true);
+    setError('');
+    try {
+      const result = await api<{ count: number }>('/api/recipes/cache', { method: 'POST' });
+      setCacheCount(result.count);
+      alert(`Cache refreshed: ${result.count} recipes loaded`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to refresh cache');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const searchRecipes = async () => {
+    setSearchDone(false);
+    try {
+      const data = await api<CachedRecipe[]>(`/api/recipes/cache?search=${encodeURIComponent(search)}`);
+      setRecipes(data);
+      setSearchDone(true);
+    } catch {
+      setRecipes([]);
+      setSearchDone(true);
+    }
+  };
+
+  const addFromCache = async (recipe: CachedRecipe) => {
     try {
       await api('/api/recipes/shelf', {
         method: 'POST',
@@ -78,13 +115,45 @@ export default function Shelf() {
           is_featured: addAsFeatured,
         }),
       });
-      setShowAddModal(false);
-      setSearch('');
-      setRecipes([]);
+      closeAddModal();
       await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add');
     }
+  };
+
+  const addManual = async () => {
+    if (!customTitle.trim()) {
+      setError('Title is required');
+      return;
+    }
+    try {
+      await api('/api/recipes/shelf', {
+        method: 'POST',
+        body: JSON.stringify({
+          custom_title: customTitle.trim(),
+          custom_url: customUrl.trim() || undefined,
+          collection_id: addToCollection || undefined,
+          is_featured: addAsFeatured,
+        }),
+      });
+      closeAddModal();
+      await loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to add');
+    }
+  };
+
+  const closeAddModal = () => {
+    setShowAddModal(false);
+    setSearch('');
+    setRecipes([]);
+    setSearchDone(false);
+    setCustomTitle('');
+    setCustomUrl('');
+    setAddToCollection('');
+    setAddAsFeatured(false);
+    setError('');
   };
 
   const removeFromShelf = async (id: string) => {
@@ -125,6 +194,7 @@ export default function Shelf() {
   };
 
   const getTitle = (item: ShelfItem) => item.custom_title || item.cached_title || 'Untitled';
+  const getUrl = (item: ShelfItem) => item.custom_url || item.cached_url;
 
   if (loading) {
     return (
@@ -143,16 +213,29 @@ export default function Shelf() {
         <p className="page-subtitle">Manage the recipe shelf</p>
       </header>
 
-      {error && <div className="error-text">{error}</div>}
+      {error && <div className="error-text" style={{ marginBottom: '16px' }}>{error}</div>}
 
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
         <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
           Add Recipe
         </button>
         <button className="btn btn-secondary" onClick={() => setShowCollectionModal(true)}>
           New Collection
         </button>
+        <button
+          className="btn btn-secondary"
+          onClick={refreshCache}
+          disabled={refreshing}
+        >
+          {refreshing ? 'Refreshing...' : 'Refresh Cache'}
+        </button>
       </div>
+
+      {cacheCount !== null && (
+        <div className="text-muted" style={{ marginBottom: '24px', fontSize: '0.85rem' }}>
+          {cacheCount} recipes in cache
+        </div>
+      )}
 
       {shelf?.featured && shelf.featured.length > 0 && (
         <section className="section">
@@ -161,7 +244,15 @@ export default function Shelf() {
             <div key={item.id} className="card shelf-item">
               <div className="shelf-item-content">
                 <span className="badge badge-accent">Featured</span>
-                <span>{getTitle(item)}</span>
+                <span>
+                  {getUrl(item) ? (
+                    <a href={getUrl(item)!} target="_blank" rel="noopener noreferrer">
+                      {getTitle(item)}
+                    </a>
+                  ) : (
+                    getTitle(item)
+                  )}
+                </span>
               </div>
               <div className="shelf-item-actions">
                 <button className="btn-icon" onClick={() => toggleFeatured(item)}>Unfeature</button>
@@ -180,7 +271,15 @@ export default function Shelf() {
           ) : (
             collection.items.map((item) => (
               <div key={item.id} className="card shelf-item">
-                <span>{getTitle(item)}</span>
+                <span>
+                  {getUrl(item) ? (
+                    <a href={getUrl(item)!} target="_blank" rel="noopener noreferrer">
+                      {getTitle(item)}
+                    </a>
+                  ) : (
+                    getTitle(item)
+                  )}
+                </span>
                 <div className="shelf-item-actions">
                   <button className="btn-icon" onClick={() => toggleFeatured(item)}>Feature</button>
                   <button className="btn-icon danger" onClick={() => removeFromShelf(item.id)}>Remove</button>
@@ -192,22 +291,89 @@ export default function Shelf() {
       ))}
 
       {showAddModal && (
-        <div className="modal-backdrop" onClick={() => setShowAddModal(false)}>
+        <div className="modal-backdrop" onClick={closeAddModal}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h2 className="modal-title">Add to Shelf</h2>
 
-            <div className="form-group">
-              <label className="form-label">Search Recipes</label>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search..."
-                />
-                <button className="btn btn-secondary" onClick={searchRecipes}>Search</button>
-              </div>
+            <div className="tabs" style={{ marginBottom: '16px' }}>
+              <button
+                className={`tab ${addMode === 'manual' ? 'active' : ''}`}
+                onClick={() => setAddMode('manual')}
+              >
+                Manual
+              </button>
+              <button
+                className={`tab ${addMode === 'search' ? 'active' : ''}`}
+                onClick={() => setAddMode('search')}
+              >
+                From Cache
+              </button>
             </div>
+
+            {addMode === 'manual' ? (
+              <>
+                <div className="form-group">
+                  <label className="form-label">Title</label>
+                  <input
+                    type="text"
+                    value={customTitle}
+                    onChange={(e) => setCustomTitle(e.target.value)}
+                    placeholder="Recipe title"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">URL (optional)</label>
+                  <input
+                    type="url"
+                    value={customUrl}
+                    onChange={(e) => setCustomUrl(e.target.value)}
+                    placeholder="https://..."
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="form-group">
+                  <label className="form-label">Search Recipes</label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <input
+                      type="text"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      placeholder="Search..."
+                      onKeyDown={(e) => e.key === 'Enter' && searchRecipes()}
+                    />
+                    <button className="btn btn-secondary" onClick={searchRecipes}>Search</button>
+                  </div>
+                  {cacheCount === 0 && (
+                    <div className="form-hint" style={{ color: 'var(--color-error)' }}>
+                      Cache is empty. Click "Refresh Cache" first.
+                    </div>
+                  )}
+                </div>
+
+                {searchDone && recipes.length === 0 && (
+                  <div className="text-muted" style={{ marginBottom: '16px' }}>
+                    No recipes found
+                  </div>
+                )}
+
+                {recipes.length > 0 && (
+                  <div className="recipe-search-results">
+                    {recipes.map((recipe) => (
+                      <button
+                        key={recipe.slug}
+                        className="card recipe-select"
+                        onClick={() => addFromCache(recipe)}
+                      >
+                        {recipe.title}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
 
             <div className="form-group">
               <label className="form-label">Add to Collection</label>
@@ -232,24 +398,19 @@ export default function Shelf() {
               />
             </div>
 
-            {recipes.length > 0 && (
-              <div className="recipe-search-results">
-                {recipes.map((recipe) => (
-                  <button
-                    key={recipe.slug}
-                    className="card recipe-select"
-                    onClick={() => addToShelf(recipe)}
-                  >
-                    {recipe.title}
-                  </button>
-                ))}
-              </div>
-            )}
-
             <div className="modal-actions">
-              <button className="btn btn-secondary" onClick={() => setShowAddModal(false)}>
+              <button className="btn btn-secondary" onClick={closeAddModal}>
                 Cancel
               </button>
+              {addMode === 'manual' && (
+                <button
+                  className="btn btn-primary"
+                  onClick={addManual}
+                  disabled={!customTitle.trim()}
+                >
+                  Add
+                </button>
+              )}
             </div>
           </div>
         </div>
