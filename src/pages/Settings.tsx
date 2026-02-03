@@ -8,6 +8,8 @@ export default function Settings() {
   const { member, refresh, logout } = useAuth();
   const [displayName, setDisplayName] = useState(member?.display_name || '');
   const [saving, setSaving] = useState(false);
+  const [loginCode, setLoginCode] = useState<string | null>(null);
+  const [generatingCode, setGeneratingCode] = useState(false);
 
   const prefs = member?.notification_prefs || {
     bake_started: false,
@@ -84,6 +86,21 @@ export default function Settings() {
     }
   };
 
+  const handleGenerateLoginCode = async () => {
+    setGeneratingCode(true);
+    try {
+      const { code } = await api<{ code: string }>('/api/auth/login-code', {
+        method: 'POST',
+      });
+      setLoginCode(code);
+    } catch (err) {
+      console.error('Failed to generate code:', err);
+      alert('Failed to generate login code');
+    } finally {
+      setGeneratingCode(false);
+    }
+  };
+
   const handleLeaveClub = async () => {
     if (!confirm('Are you sure you want to leave the club?')) return;
     await logout();
@@ -121,6 +138,48 @@ export default function Settings() {
               </button>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section className="section">
+        <h2 className="section-title">Devices</h2>
+        <div className="card">
+          <div className="card-title">Login on another device</div>
+          <div className="card-meta" style={{ marginBottom: '12px' }}>
+            Generate a one-time code to log in on another device with the same account
+          </div>
+          {loginCode ? (
+            <div style={{ textAlign: 'center', padding: '16px 0' }}>
+              <div style={{
+                fontFamily: 'monospace',
+                fontSize: '2rem',
+                fontWeight: 600,
+                letterSpacing: '0.25em',
+                marginBottom: '8px'
+              }}>
+                {loginCode}
+              </div>
+              <div className="text-muted" style={{ fontSize: '0.85rem' }}>
+                Expires in 5 minutes
+              </div>
+              <button
+                className="btn btn-secondary"
+                onClick={() => setLoginCode(null)}
+                style={{ marginTop: '12px' }}
+              >
+                Done
+              </button>
+            </div>
+          ) : (
+            <button
+              className="btn btn-secondary"
+              onClick={handleGenerateLoginCode}
+              disabled={generatingCode}
+              style={{ width: '100%' }}
+            >
+              {generatingCode ? 'Generating...' : 'Generate login code'}
+            </button>
+          )}
         </div>
       </section>
 

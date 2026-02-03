@@ -243,6 +243,67 @@ app.post('/auth/logout', async (c) => {
   return c.json({ success: true });
 });
 
+// Generate a login code for multi-device login
+app.post('/auth/login-code', async (c) => {
+  const memberId = c.get('memberId');
+  const isAdmin = c.get('isAdmin');
+
+  if (!memberId) {
+    return c.json({ error: 'Not authenticated' }, 401);
+  }
+
+  // Generate a 6-character alphanumeric code
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 6; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+
+  // Store in KV with 5-minute expiry
+  await c.env.SESSIONS.put(`login_code:${code}`, JSON.stringify({
+    memberId,
+    isAdmin,
+  }), { expirationTtl: 300 });
+
+  return c.json({ code, expires_in: 300 });
+});
+
+// Login with a code from another device
+app.post('/auth/login-with-code', async (c) => {
+  const body = await c.req.json<{ code: string }>();
+  const code = (body.code || '').trim().toUpperCase();
+
+  if (!code || code.length !== 6) {
+    return c.json({ error: 'Invalid code format' }, 400);
+  }
+
+  const data = await c.env.SESSIONS.get(`login_code:${code}`, 'json') as { memberId: string; isAdmin: boolean } | null;
+
+  if (!data) {
+    return c.json({ error: 'Invalid or expired code' }, 400);
+  }
+
+  // Delete the code so it can't be reused
+  await c.env.SESSIONS.delete(`login_code:${code}`);
+
+  // Create a new session
+  const sessionId = generateSessionId();
+  await c.env.SESSIONS.put(sessionId, JSON.stringify({
+    memberId: data.memberId,
+    isAdmin: data.isAdmin,
+  }), { expirationTtl: 60 * 60 * 24 * 30 });
+
+  setCookie(c, 'session', sessionId, {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'Lax',
+    maxAge: 60 * 60 * 24 * 30,
+    path: '/',
+  });
+
+  return c.json({ success: true });
+});
+
 // ==================== PULSES ROUTES ====================
 
 app.get('/pulses', async (c) => {
