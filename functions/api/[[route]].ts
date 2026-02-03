@@ -1276,22 +1276,37 @@ app.post('/admin/invite-codes', async (c) => {
     return c.json({ error: 'Admin access required' }, 403);
   }
 
-  const body = await c.req.json<{ max_uses?: number }>();
-
-  const codeId = generateId();
-  const code = generateInviteCode();
+  const body = await c.req.json<{ max_uses?: number; email?: string; count?: number }>();
+  const count = Math.min(Math.max(body.count || 1, 1), 50); // 1-50 codes at a time
   const now = new Date().toISOString();
 
-  await c.env.DB.prepare(`
-    INSERT INTO invite_codes (id, code, created_by, max_uses, uses_count, is_active, created_at)
-    VALUES (?, ?, ?, ?, 0, 1, ?)
-  `).bind(codeId, code, memberId, body.max_uses || null, now).run();
+  const codes = [];
+  for (let i = 0; i < count; i++) {
+    const codeId = generateId();
+    const code = generateInviteCode();
 
-  const inviteCode = await c.env.DB.prepare(
-    'SELECT * FROM invite_codes WHERE id = ?'
-  ).bind(codeId).first();
+    // Try with email column, fall back to without if column doesn't exist
+    try {
+      await c.env.DB.prepare(`
+        INSERT INTO invite_codes (id, code, created_by, max_uses, uses_count, is_active, created_at, email)
+        VALUES (?, ?, ?, ?, 0, 1, ?, ?)
+      `).bind(codeId, code, memberId, body.max_uses ?? 1, now, body.email || null).run();
+    } catch {
+      // Fallback without email column
+      await c.env.DB.prepare(`
+        INSERT INTO invite_codes (id, code, created_by, max_uses, uses_count, is_active, created_at)
+        VALUES (?, ?, ?, ?, 0, 1, ?)
+      `).bind(codeId, code, memberId, body.max_uses ?? 1, now).run();
+    }
 
-  return c.json(inviteCode, 201);
+    const inviteCode = await c.env.DB.prepare(
+      'SELECT * FROM invite_codes WHERE id = ?'
+    ).bind(codeId).first();
+
+    codes.push(inviteCode);
+  }
+
+  return c.json(count === 1 ? codes[0] : codes, 201);
 });
 
 app.delete('/admin/invite-codes/:id', async (c) => {

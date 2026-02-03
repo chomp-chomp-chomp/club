@@ -9,13 +9,17 @@ interface InviteCode {
   uses_count: number;
   is_active: number;
   created_at: string;
+  email: string | null;
 }
 
 export default function InviteCodes() {
   const [codes, setCodes] = useState<InviteCode[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
-  const [maxUses, setMaxUses] = useState('');
+  const [maxUses, setMaxUses] = useState('1');
+  const [count, setCount] = useState('1');
+  const [email, setEmail] = useState('');
+  const [showBulkResult, setShowBulkResult] = useState<string[] | null>(null);
 
   const loadCodes = async () => {
     try {
@@ -34,14 +38,24 @@ export default function InviteCodes() {
 
   const generateCode = async () => {
     setGenerating(true);
+    setShowBulkResult(null);
     try {
-      await api('/api/admin/invite-codes', {
+      const countNum = parseInt(count, 10) || 1;
+      const result = await api<InviteCode | InviteCode[]>('/api/admin/invite-codes', {
         method: 'POST',
         body: JSON.stringify({
-          max_uses: maxUses ? parseInt(maxUses, 10) : undefined,
+          max_uses: maxUses ? parseInt(maxUses, 10) : 1,
+          count: countNum,
+          email: email.trim() || undefined,
         }),
       });
-      setMaxUses('');
+
+      // Show bulk result if multiple codes generated
+      if (Array.isArray(result)) {
+        setShowBulkResult(result.map(c => c.code));
+      }
+
+      setEmail('');
       await loadCodes();
     } catch (error) {
       console.error('Failed to generate:', error);
@@ -64,6 +78,12 @@ export default function InviteCodes() {
     navigator.clipboard.writeText(code);
   };
 
+  const copyAllCodes = () => {
+    if (showBulkResult) {
+      navigator.clipboard.writeText(showBulkResult.join('\n'));
+    }
+  };
+
   if (loading) {
     return (
       <div className="container">
@@ -84,26 +104,84 @@ export default function InviteCodes() {
         <p className="page-subtitle">{activeCodes.length} active codes</p>
       </header>
 
-      <div className="generate-form">
+      <div className="card" style={{ marginBottom: '24px' }}>
         <div className="form-group">
-          <label className="form-label" htmlFor="maxUses">Max Uses (optional)</label>
+          <label className="form-label" htmlFor="count">Number of codes</label>
+          <input
+            id="count"
+            type="number"
+            value={count}
+            onChange={(e) => setCount(e.target.value)}
+            placeholder="1"
+            min="1"
+            max="50"
+          />
+          <div className="form-hint">Generate up to 50 codes at once</div>
+        </div>
+
+        <div className="form-group">
+          <label className="form-label" htmlFor="maxUses">Max uses per code</label>
           <input
             id="maxUses"
             type="number"
             value={maxUses}
             onChange={(e) => setMaxUses(e.target.value)}
-            placeholder="Unlimited"
+            placeholder="1"
             min="1"
           />
         </div>
+
+        <div className="form-group">
+          <label className="form-label" htmlFor="email">Email (optional)</label>
+          <input
+            id="email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="person@example.com"
+          />
+          <div className="form-hint">Associate codes with an email for tracking</div>
+        </div>
+
         <button
           className="btn btn-primary"
           onClick={generateCode}
           disabled={generating}
+          style={{ width: '100%' }}
         >
-          {generating ? 'Generating...' : 'Generate Code'}
+          {generating ? 'Generating...' : `Generate ${parseInt(count, 10) > 1 ? count + ' Codes' : 'Code'}`}
         </button>
       </div>
+
+      {showBulkResult && (
+        <div className="card" style={{ marginBottom: '24px', background: 'var(--color-accent-muted)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+            <strong>Generated {showBulkResult.length} codes:</strong>
+            <button className="btn btn-secondary" onClick={copyAllCodes}>
+              Copy All
+            </button>
+          </div>
+          <div style={{
+            fontFamily: 'monospace',
+            fontSize: '0.9rem',
+            whiteSpace: 'pre-wrap',
+            background: 'var(--color-surface)',
+            padding: '12px',
+            borderRadius: '8px',
+            maxHeight: '200px',
+            overflow: 'auto'
+          }}>
+            {showBulkResult.join('\n')}
+          </div>
+          <button
+            className="btn btn-secondary"
+            onClick={() => setShowBulkResult(null)}
+            style={{ marginTop: '12px' }}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {activeCodes.length > 0 && (
         <section className="section">
@@ -117,6 +195,7 @@ export default function InviteCodes() {
                 </div>
                 <div className="code-meta">
                   <span>Uses: {code.uses_count}{code.max_uses ? `/${code.max_uses}` : ''}</span>
+                  {code.email && <span>Email: {code.email}</span>}
                   <span>Created: {formatRelativeTime(code.created_at)}</span>
                 </div>
               </div>
@@ -140,6 +219,7 @@ export default function InviteCodes() {
                 <div className="code-value">{code.code}</div>
                 <div className="code-meta">
                   <span>Uses: {code.uses_count}</span>
+                  {code.email && <span>Email: {code.email}</span>}
                 </div>
               </div>
             </div>
