@@ -879,7 +879,14 @@ app.post('/recipes/cache', async (c) => {
       return c.json({ error: 'Failed to fetch recipes from external API' }, 502);
     }
 
-    const recipes = await response.json() as any[];
+    const rawRecipes = await response.json() as any;
+    const recipes = Array.isArray(rawRecipes)
+      ? rawRecipes
+      : rawRecipes?.recipes || rawRecipes?.items || rawRecipes?.data || [];
+
+    if (!Array.isArray(recipes)) {
+      return c.json({ error: 'Unexpected recipe payload format' }, 502);
+    }
     let updated = 0;
 
     for (const recipe of recipes) {
@@ -912,7 +919,7 @@ app.post('/recipes/cache', async (c) => {
       updated++;
     }
 
-    return c.json({ success: true, updated });
+    return c.json({ success: true, updated, count: recipes.length });
   } catch (error) {
     console.error('Refresh cache error:', error);
     return c.json({ error: 'Failed to refresh cache' }, 500);

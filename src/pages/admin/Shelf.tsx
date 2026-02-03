@@ -83,9 +83,15 @@ export default function Shelf() {
     setRefreshing(true);
     setError('');
     try {
-      const result = await api<{ count: number }>('/api/recipes/cache', { method: 'POST' });
-      setCacheCount(result.count);
-      alert(`Cache refreshed: ${result.count} recipes loaded`);
+      const result = await api<{ count?: number; updated?: number }>('/api/recipes/cache', { method: 'POST' });
+      const count = result.count ?? result.updated ?? null;
+      if (count !== null) {
+        setCacheCount(count);
+        alert(`Cache refreshed: ${count} recipes loaded`);
+      } else {
+        await checkCache();
+        alert('Cache refreshed');
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to refresh cache');
     } finally {
