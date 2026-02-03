@@ -116,7 +116,7 @@ After deployment, configure the D1 and KV bindings:
 | `VAPID_PUBLIC_KEY` | (see below) | For push notifications |
 | `VAPID_PRIVATE_KEY` | (see below) | Click **Encrypt** |
 | `VAPID_SUBJECT` | `mailto:your-email@example.com` | Your email |
-| `RECIPE_API_URL` | `https://chomp-chomp-chomp.github.io/chomp/api/recipes/index.json` | Recipe source |
+| `RECIPE_API_URL` | `https://chompchomp.cc/data/recipes.json` | Recipe source |
 | `APP_URL` | Your Pages URL | e.g., `https://club-chomp.pages.dev` |
 
 3. Click **Save**
