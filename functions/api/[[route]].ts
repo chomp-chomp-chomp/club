@@ -257,7 +257,7 @@ app.post('/auth/magic-link', async (c) => {
     }), { expirationTtl: 60 * 15 }); // 15 minutes
 
     // Send email via Resend
-    const appUrl = c.env.APP_URL || 'https://club-chomp.pages.dev';
+    const appUrl = c.env.APP_URL || 'https://club.chompchomp.cc';
     const magicUrl = `${appUrl}/magic?token=${token}`;
 
     if (c.env.RESEND_API_KEY) {
@@ -1341,9 +1341,11 @@ app.post('/admin/drop-recipe', async (c) => {
     recipe_slug?: string;
     custom_title?: string;
     custom_url?: string;
+    notes?: string;
   }>();
 
   let title: string;
+  let url: string | null = null;
 
   if (body.recipe_slug) {
     const recipe = await c.env.DB.prepare(
@@ -1355,23 +1357,27 @@ app.post('/admin/drop-recipe', async (c) => {
     }
 
     title = recipe.title as string;
-  } else if (body.custom_title && body.custom_url) {
+    url = recipe.url as string;
+  } else if (body.custom_title) {
     title = sanitizeText(body.custom_title, 200);
+    url = body.custom_url || null;
   } else {
-    return c.json({ error: 'Recipe slug or custom title/url required' }, 400);
+    return c.json({ error: 'Recipe slug or custom title required' }, 400);
   }
 
+  const notes = body.notes ? sanitizeText(body.notes, 500) : null;
   const pulseId = generateId();
   const now = new Date().toISOString();
 
   await c.env.DB.prepare(`
-    INSERT INTO pulses (id, type, member_id, title, body, recipe_slug, created_at)
-    VALUES (?, 'recipe_dropped', ?, ?, ?, ?, ?)
+    INSERT INTO pulses (id, type, member_id, title, body, url, recipe_slug, created_at)
+    VALUES (?, 'recipe_dropped', ?, ?, ?, ?, ?, ?)
   `).bind(
     pulseId,
     memberId,
-    'New recipe dropped',
     title,
+    notes,
+    url,
     body.recipe_slug || null,
     now
   ).run();
