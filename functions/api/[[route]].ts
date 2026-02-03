@@ -1467,6 +1467,50 @@ app.delete('/admin/club-calls/:id', async (c) => {
   return c.json({ success: true });
 });
 
+app.get('/admin/recipe-drops', async (c) => {
+  const memberId = c.get('memberId');
+  const isAdmin = c.get('isAdmin');
+
+  if (!memberId) {
+    return c.json({ error: 'Not authenticated' }, 401);
+  }
+
+  if (!isAdmin) {
+    return c.json({ error: 'Admin access required' }, 403);
+  }
+
+  const drops = await c.env.DB.prepare(`
+    SELECT p.*, m.display_name as member_name
+    FROM pulses p
+    LEFT JOIN members m ON m.id = p.member_id
+    WHERE p.type = 'recipe_dropped'
+    ORDER BY p.created_at DESC
+    LIMIT 50
+  `).all();
+
+  return c.json(drops.results);
+});
+
+app.delete('/admin/recipe-drops/:id', async (c) => {
+  const memberId = c.get('memberId');
+  const isAdmin = c.get('isAdmin');
+  const dropId = c.req.param('id');
+
+  if (!memberId) {
+    return c.json({ error: 'Not authenticated' }, 401);
+  }
+
+  if (!isAdmin) {
+    return c.json({ error: 'Admin access required' }, 403);
+  }
+
+  await c.env.DB.prepare(
+    "DELETE FROM pulses WHERE id = ? AND type = 'recipe_dropped'"
+  ).bind(dropId).run();
+
+  return c.json({ success: true });
+});
+
 app.get('/admin/invite-codes', async (c) => {
   const memberId = c.get('memberId');
   const isAdmin = c.get('isAdmin');
