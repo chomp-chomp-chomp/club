@@ -5,6 +5,7 @@ import { api, formatRelativeTime } from '../../lib/api';
 interface Member {
   id: string;
   display_name: string;
+  email: string;
   is_admin: number;
   is_active: number;
   created_at: string;
@@ -70,6 +71,7 @@ export default function Members() {
                 {!member.is_active && <span className="badge badge-muted">Disabled</span>}
               </div>
               <div className="member-meta">
+                <span>{member.email}</span>
                 <span>Last seen: {formatRelativeTime(member.last_seen_at)}</span>
                 <span>{member.subscription_count} push subscription{member.subscription_count !== 1 ? 's' : ''}</span>
               </div>

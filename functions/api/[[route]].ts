@@ -77,9 +77,28 @@ app.use('*', async (c, next) => {
 
   if (sessionId) {
     const session = await c.env.SESSIONS.get(sessionId, 'json') as { memberId: string; isAdmin: boolean } | null;
-    if (session) {
-      c.set('memberId', session.memberId);
-      c.set('isAdmin', session.isAdmin);
+    if (session?.memberId) {
+      const member = await c.env.DB.prepare(
+        'SELECT is_admin, is_active FROM members WHERE id = ?'
+      ).bind(session.memberId).first<{ is_admin: number; is_active: number }>();
+
+      if (member && member.is_active === 1) {
+        const isAdmin = Boolean(member.is_admin);
+        c.set('memberId', session.memberId);
+        c.set('isAdmin', isAdmin);
+
+        if (session.isAdmin !== isAdmin) {
+          await c.env.SESSIONS.put(sessionId, JSON.stringify({
+            memberId: session.memberId,
+            isAdmin,
+          }), { expirationTtl: 60 * 60 * 24 * 30 });
+        }
+      } else {
+        await c.env.SESSIONS.delete(sessionId);
+        deleteCookie(c, 'session', { path: '/' });
+        c.set('memberId', null);
+        c.set('isAdmin', false);
+      }
     } else {
       c.set('memberId', null);
       c.set('isAdmin', false);
@@ -852,7 +871,7 @@ app.post('/recipes/cache', async (c) => {
     return c.json({ error: 'Admin access required' }, 403);
   }
 
-  const apiUrl = c.env.RECIPE_API_URL || 'https://chomp-chomp-chomp.github.io/chomp/api/recipes/index.json';
+  const apiUrl = c.env.RECIPE_API_URL || 'https://chompchomp.cc/data/recipes.json';
 
   try {
     const response = await fetch(apiUrl);
@@ -864,6 +883,13 @@ app.post('/recipes/cache', async (c) => {
     let updated = 0;
 
     for (const recipe of recipes) {
+      const slug = recipe.slug || recipe.id;
+      if (!slug) {
+        continue;
+      }
+
+      const url = recipe.url || `https://chompchomp.cc/recipe?slug=${encodeURIComponent(slug)}`;
+
       await c.env.DB.prepare(`
         INSERT INTO recipes_cache (slug, title, url, tags, excerpt, updated_at, cached_at)
         VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -875,9 +901,9 @@ app.post('/recipes/cache', async (c) => {
           updated_at = excluded.updated_at,
           cached_at = excluded.cached_at
       `).bind(
-        recipe.slug,
+        slug,
         recipe.title,
-        recipe.url,
+        url,
         JSON.stringify(recipe.tags || []),
         recipe.excerpt || null,
         recipe.updated_at || null,
