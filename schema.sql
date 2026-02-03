@@ -5,6 +5,7 @@
 CREATE TABLE IF NOT EXISTS members (
   id TEXT PRIMARY KEY,
   display_name TEXT NOT NULL,
+  email TEXT NOT NULL,
   invite_code_id TEXT,
   is_admin INTEGER DEFAULT 0,
   is_active INTEGER DEFAULT 1,

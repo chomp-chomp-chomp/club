@@ -1,11 +1,11 @@
 {
-  "name": "Chomp Club",
-  "short_name": "Chomp Club",
+  "name": "Club Chomp",
+  "short_name": "Club Chomp",
   "description": "A calm, curated baking club",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#faf9f7",
-  "theme_color": "#d97706",
+  "theme_color": "#e73b42",
   "orientation": "portrait",
   "scope": "/",
   "icons": [

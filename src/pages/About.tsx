@@ -6,14 +6,14 @@ export default function About() {
       <Link to="/settings" className="back-link">← Back</Link>
 
       <header className="page-header" style={{ textAlign: 'left', paddingLeft: 0 }}>
-        <h1 className="page-title">About Chomp Club</h1>
+        <h1 className="page-title">About Club Chomp</h1>
       </header>
 
       <section className="section">
-        <h2 className="section-title">What is Chomp Club?</h2>
+        <h2 className="section-title">What is Club Chomp?</h2>
         <div className="card">
           <p>
-            Chomp Club is a quiet baking club for friends. It&apos;s designed to be calm
+            Club Chomp is a quiet baking club for friends. It&apos;s designed to be calm
             and intentional, not addictive or engagement-driven.
           </p>
           <p style={{ marginTop: '12px' }}>
@@ -62,7 +62,7 @@ export default function About() {
           <p><strong>Not receiving notifications?</strong></p>
           <ul style={{ paddingLeft: '20px', marginTop: '8px', lineHeight: '1.8' }}>
             <li>Make sure you opened the app from your Home Screen, not Safari</li>
-            <li>Check Settings → Notifications → Chomp Club</li>
+            <li>Check Settings → Notifications → Club Chomp</li>
             <li>Try the "Re-enable notifications" button in Settings</li>
             <li>Make sure you have iOS 16.4 or later</li>
           </ul>

@@ -12,11 +12,12 @@ export default function Onboarding() {
   const [step, setStep] = useState<Step>('welcome');
   const [joinMode, setJoinMode] = useState<JoinMode>('invite');
   const [inviteCode, setInviteCode] = useState('');
-  const [loginCode, setLoginCode] = useState('');
+  const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
+  const [magicLinkSent, setMagicLinkSent] = useState(false);
 
   useEffect(() => {
     // Check if running as installed PWA
@@ -32,8 +33,8 @@ export default function Onboarding() {
   }, [member, navigate]);
 
   const handleJoin = async () => {
-    if (!inviteCode.trim() || !displayName.trim()) {
-      setError('Please enter both invite code and display name');
+    if (!inviteCode.trim() || !displayName.trim() || !email.trim()) {
+      setError('Please fill in all fields');
       return;
     }
 
@@ -46,6 +47,7 @@ export default function Onboarding() {
         body: JSON.stringify({
           invite_code: inviteCode.trim(),
           display_name: displayName.trim(),
+          email: email.trim(),
         }),
       });
       await refresh();
@@ -57,9 +59,9 @@ export default function Onboarding() {
     }
   };
 
-  const handleLoginWithCode = async () => {
-    if (!loginCode.trim()) {
-      setError('Please enter a login code');
+  const handleRequestMagicLink = async () => {
+    if (!email.trim()) {
+      setError('Please enter your email');
       return;
     }
 
@@ -67,14 +69,13 @@ export default function Onboarding() {
     setError('');
 
     try {
-      await api('/api/auth/login-with-code', {
+      await api('/api/auth/magic-link', {
         method: 'POST',
-        body: JSON.stringify({ code: loginCode.trim() }),
+        body: JSON.stringify({ email: email.trim() }),
       });
-      await refresh();
-      setStep('complete');
+      setMagicLinkSent(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Invalid or expired code');
+      setError(err instanceof Error ? err.message : 'Failed to send login link');
     } finally {
       setLoading(false);
     }
@@ -131,7 +132,7 @@ export default function Onboarding() {
     <main className="onboarding-container">
       {step === 'welcome' && (
         <div className="onboarding-step">
-          <h1 className="onboarding-title">Welcome to Chomp Club</h1>
+          <h1 className="onboarding-title">Welcome to Club Chomp</h1>
           <p className="onboarding-subtitle">
             A quiet baking club for friends.<br />
             Feel the ambient presence of your fellow bakers.
@@ -149,7 +150,7 @@ export default function Onboarding() {
         <div className="onboarding-step">
           <h1 className="onboarding-title">Add to Home Screen</h1>
           <p className="onboarding-subtitle">
-            For the best experience and push notifications, install Chomp Club to your Home Screen.
+            For the best experience and push notifications, install Club Chomp to your Home Screen.
           </p>
 
           <div className="card" style={{ textAlign: 'left', marginBottom: '24px' }}>
@@ -182,26 +183,26 @@ export default function Onboarding() {
       {step === 'code' && (
         <div className="onboarding-step" style={{ textAlign: 'left' }}>
           <h1 className="onboarding-title" style={{ textAlign: 'center' }}>
-            {joinMode === 'invite' ? 'Join the Club' : 'Login'}
+            {joinMode === 'invite' ? 'Join the Club' : 'Sign In'}
           </h1>
           <p className="onboarding-subtitle" style={{ textAlign: 'center' }}>
             {joinMode === 'invite'
               ? 'Enter your invite code to join.'
-              : 'Enter your login code from another device.'}
+              : 'Get a login link sent to your email.'}
           </p>
 
           <div className="tabs" style={{ marginBottom: '24px' }}>
             <button
               className={`tab ${joinMode === 'invite' ? 'active' : ''}`}
-              onClick={() => { setJoinMode('invite'); setError(''); }}
+              onClick={() => { setJoinMode('invite'); setError(''); setMagicLinkSent(false); }}
             >
               Join
             </button>
             <button
               className={`tab ${joinMode === 'login' ? 'active' : ''}`}
-              onClick={() => { setJoinMode('login'); setError(''); }}
+              onClick={() => { setJoinMode('login'); setError(''); setMagicLinkSent(false); }}
             >
-              Login
+              Sign In
             </button>
           </div>
 
@@ -233,45 +234,74 @@ export default function Onboarding() {
                 />
               </div>
 
-              {error && <div className="error-text" style={{ marginBottom: '16px' }}>{error}</div>}
-
-              <button
-                className="btn btn-primary btn-large"
-                onClick={handleJoin}
-                disabled={loading || !inviteCode.trim() || !displayName.trim()}
-              >
-                {loading ? 'Joining...' : 'Join Club'}
-              </button>
-            </>
-          ) : (
-            <>
               <div className="form-group">
-                <label className="form-label" htmlFor="loginCode">Login Code</label>
+                <label className="form-label" htmlFor="email">Email</label>
                 <input
-                  id="loginCode"
-                  type="text"
-                  value={loginCode}
-                  onChange={(e) => setLoginCode(e.target.value.toUpperCase())}
-                  placeholder="ABC123"
-                  autoCapitalize="characters"
-                  autoComplete="off"
-                  maxLength={6}
-                  style={{ textAlign: 'center', letterSpacing: '0.25em', fontSize: '1.5rem' }}
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  autoComplete="email"
                 />
-                <div className="form-hint">
-                  Generate this code from Settings on your other device
-                </div>
+                <div className="form-hint">Used for signing back in if you get logged out</div>
               </div>
 
               {error && <div className="error-text" style={{ marginBottom: '16px' }}>{error}</div>}
 
               <button
                 className="btn btn-primary btn-large"
-                onClick={handleLoginWithCode}
-                disabled={loading || loginCode.length !== 6}
+                onClick={handleJoin}
+                disabled={loading || !inviteCode.trim() || !displayName.trim() || !email.trim()}
               >
-                {loading ? 'Logging in...' : 'Login'}
+                {loading ? 'Joining...' : 'Join Club'}
               </button>
+            </>
+          ) : (
+            <>
+              {magicLinkSent ? (
+                <div className="card" style={{ textAlign: 'center', padding: '24px' }}>
+                  <div style={{ fontSize: '2rem', marginBottom: '16px' }}>Check your email</div>
+                  <p>If an account exists for <strong>{email}</strong>, we sent a login link.</p>
+                  <p style={{ marginTop: '12px', color: 'var(--color-text-muted)' }}>
+                    The link expires in 15 minutes.
+                  </p>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => { setMagicLinkSent(false); setEmail(''); }}
+                    style={{ marginTop: '16px' }}
+                  >
+                    Try different email
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="loginEmail">Email</label>
+                    <input
+                      id="loginEmail"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="you@example.com"
+                      autoComplete="email"
+                    />
+                    <div className="form-hint">
+                      We'll send you a magic link to sign in
+                    </div>
+                  </div>
+
+                  {error && <div className="error-text" style={{ marginBottom: '16px' }}>{error}</div>}
+
+                  <button
+                    className="btn btn-primary btn-large"
+                    onClick={handleRequestMagicLink}
+                    disabled={loading || !email.trim()}
+                  >
+                    {loading ? 'Sending...' : 'Send Login Link'}
+                  </button>
+                </>
+              )}
             </>
           )}
         </div>
