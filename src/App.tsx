@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Layout from './components/Layout';
@@ -15,6 +16,7 @@ import AdminShelf from './pages/admin/Shelf';
 import AdminMembers from './pages/admin/Members';
 import AdminBulletins from './pages/admin/Bulletins';
 import AdminInviteCodes from './pages/admin/InviteCodes';
+import { initSoundHandler, addPendingSound } from './lib/sounds';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { member, loading } = useAuth();
@@ -126,6 +128,20 @@ function AppRoutes() {
 }
 
 export default function App() {
+  useEffect(() => {
+    // Initialize sound handler
+    initSoundHandler();
+
+    // Listen for service worker messages about pending sounds
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', (event) => {
+        if (event.data?.type === 'PENDING_SOUND' && event.data.sound) {
+          addPendingSound(event.data.sound);
+        }
+      });
+    }
+  }, []);
+
   return (
     <AuthProvider>
       <AppRoutes />

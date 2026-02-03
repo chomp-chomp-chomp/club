@@ -77,18 +77,31 @@ self.addEventListener('push', (event) => {
       data: {
         url: payload.url,
         pulse_id: payload.pulse_id,
+        pulse_type: payload.type,
       },
       requireInteraction: false,
       silent: false,
     };
 
+    // Notify active clients about pending sound
     event.waitUntil(
-      self.registration.showNotification(payload.title, options)
+      notifyClientsOfSound(payload.type).then(() =>
+        self.registration.showNotification(payload.title, options)
+      )
     );
   } catch (err) {
     console.error('Push event error:', err);
   }
 });
+
+// Notify clients to store pending sound
+async function notifyClientsOfSound(type) {
+  if (!type) return;
+  const clients = await self.clients.matchAll({ type: 'window' });
+  for (const client of clients) {
+    client.postMessage({ type: 'PENDING_SOUND', sound: type });
+  }
+}
 
 // Notification click - open app
 self.addEventListener('notificationclick', (event) => {

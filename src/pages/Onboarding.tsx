@@ -4,12 +4,15 @@ import { useAuth } from '../context/AuthContext';
 import { api, urlBase64ToUint8Array } from '../lib/api';
 
 type Step = 'welcome' | 'install' | 'code' | 'notifications' | 'complete';
+type JoinMode = 'invite' | 'login';
 
 export default function Onboarding() {
   const navigate = useNavigate();
   const { member, refresh } = useAuth();
   const [step, setStep] = useState<Step>('welcome');
+  const [joinMode, setJoinMode] = useState<JoinMode>('invite');
   const [inviteCode, setInviteCode] = useState('');
+  const [loginCode, setLoginCode] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -49,6 +52,29 @@ export default function Onboarding() {
       setStep('notifications');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to join');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLoginWithCode = async () => {
+    if (!loginCode.trim()) {
+      setError('Please enter a login code');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      await api('/api/auth/login-with-code', {
+        method: 'POST',
+        body: JSON.stringify({ code: loginCode.trim() }),
+      });
+      await refresh();
+      setStep('complete');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Invalid or expired code');
     } finally {
       setLoading(false);
     }
@@ -155,46 +181,99 @@ export default function Onboarding() {
 
       {step === 'code' && (
         <div className="onboarding-step" style={{ textAlign: 'left' }}>
-          <h1 className="onboarding-title" style={{ textAlign: 'center' }}>Join the Club</h1>
+          <h1 className="onboarding-title" style={{ textAlign: 'center' }}>
+            {joinMode === 'invite' ? 'Join the Club' : 'Login'}
+          </h1>
           <p className="onboarding-subtitle" style={{ textAlign: 'center' }}>
-            Enter your invite code to join.
+            {joinMode === 'invite'
+              ? 'Enter your invite code to join.'
+              : 'Enter your login code from another device.'}
           </p>
 
-          <div className="form-group">
-            <label className="form-label" htmlFor="inviteCode">Invite Code</label>
-            <input
-              id="inviteCode"
-              type="text"
-              value={inviteCode}
-              onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
-              placeholder="ABCD1234"
-              autoCapitalize="characters"
-              autoComplete="off"
-              style={{ textAlign: 'center', letterSpacing: '2px', fontSize: '1.25rem' }}
-            />
+          <div className="tabs" style={{ marginBottom: '24px' }}>
+            <button
+              className={`tab ${joinMode === 'invite' ? 'active' : ''}`}
+              onClick={() => { setJoinMode('invite'); setError(''); }}
+            >
+              Join
+            </button>
+            <button
+              className={`tab ${joinMode === 'login' ? 'active' : ''}`}
+              onClick={() => { setJoinMode('login'); setError(''); }}
+            >
+              Login
+            </button>
           </div>
 
-          <div className="form-group">
-            <label className="form-label" htmlFor="displayName">Your Name</label>
-            <input
-              id="displayName"
-              type="text"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              placeholder="How should we call you?"
-              maxLength={50}
-            />
-          </div>
+          {joinMode === 'invite' ? (
+            <>
+              <div className="form-group">
+                <label className="form-label" htmlFor="inviteCode">Invite Code</label>
+                <input
+                  id="inviteCode"
+                  type="text"
+                  value={inviteCode}
+                  onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                  placeholder="ABCD1234"
+                  autoCapitalize="characters"
+                  autoComplete="off"
+                  style={{ textAlign: 'center', letterSpacing: '2px', fontSize: '1.25rem' }}
+                />
+              </div>
 
-          {error && <div className="error-text" style={{ marginBottom: '16px' }}>{error}</div>}
+              <div className="form-group">
+                <label className="form-label" htmlFor="displayName">Your Name</label>
+                <input
+                  id="displayName"
+                  type="text"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  placeholder="How should we call you?"
+                  maxLength={50}
+                />
+              </div>
 
-          <button
-            className="btn btn-primary btn-large"
-            onClick={handleJoin}
-            disabled={loading || !inviteCode.trim() || !displayName.trim()}
-          >
-            {loading ? 'Joining...' : 'Join Club'}
-          </button>
+              {error && <div className="error-text" style={{ marginBottom: '16px' }}>{error}</div>}
+
+              <button
+                className="btn btn-primary btn-large"
+                onClick={handleJoin}
+                disabled={loading || !inviteCode.trim() || !displayName.trim()}
+              >
+                {loading ? 'Joining...' : 'Join Club'}
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="form-group">
+                <label className="form-label" htmlFor="loginCode">Login Code</label>
+                <input
+                  id="loginCode"
+                  type="text"
+                  value={loginCode}
+                  onChange={(e) => setLoginCode(e.target.value.toUpperCase())}
+                  placeholder="ABC123"
+                  autoCapitalize="characters"
+                  autoComplete="off"
+                  maxLength={6}
+                  style={{ textAlign: 'center', letterSpacing: '0.25em', fontSize: '1.5rem' }}
+                />
+                <div className="form-hint">
+                  Generate this code from Settings on your other device
+                </div>
+              </div>
+
+              {error && <div className="error-text" style={{ marginBottom: '16px' }}>{error}</div>}
+
+              <button
+                className="btn btn-primary btn-large"
+                onClick={handleLoginWithCode}
+                disabled={loading || loginCode.length !== 6}
+              >
+                {loading ? 'Logging in...' : 'Login'}
+              </button>
+            </>
+          )}
         </div>
       )}
 
