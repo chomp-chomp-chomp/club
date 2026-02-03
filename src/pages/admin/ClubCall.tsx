@@ -1,11 +1,35 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api } from '../../lib/api';
+import { api, formatRelativeTime } from '../../lib/api';
+
+interface ClubCallItem {
+  id: string;
+  body: string;
+  member_name: string;
+  created_at: string;
+}
 
 export default function ClubCall() {
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState('');
+  const [calls, setCalls] = useState<ClubCallItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadCalls = async () => {
+    try {
+      const data = await api<ClubCallItem[]>('/api/admin/club-calls');
+      setCalls(data);
+    } catch (error) {
+      console.error('Failed to load club calls:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadCalls();
+  }, []);
 
   const handleSend = async () => {
     if (!message.trim()) return;
@@ -13,16 +37,28 @@ export default function ClubCall() {
     setSending(true);
     setResult('');
     try {
-      const response = await api<{ push: { sent: number; failed: number } }>('/api/admin/club-call', {
+      await api<{ pulse: object }>('/api/admin/club-call', {
         method: 'POST',
         body: JSON.stringify({ message: message.trim() }),
       });
-      setResult(`Sent! ${response.push.sent} notifications delivered.`);
+      setResult('Club call sent!');
       setMessage('');
+      await loadCalls();
     } catch (error) {
       setResult(error instanceof Error ? error.message : 'Failed to send');
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Delete this club call?')) return;
+
+    try {
+      await api(`/api/admin/club-calls/${id}`, { method: 'DELETE' });
+      await loadCalls();
+    } catch (error) {
+      console.error('Failed to delete:', error);
     }
   };
 
@@ -75,6 +111,35 @@ export default function ClubCall() {
       >
         {sending ? 'Sending...' : 'Send Club Call'}
       </button>
+
+      <section style={{ marginTop: '32px' }}>
+        <h2 className="section-title">Recent Club Calls</h2>
+        {loading ? (
+          <div className="empty-state">Loading...</div>
+        ) : calls.length === 0 ? (
+          <div className="empty-state">No club calls yet</div>
+        ) : (
+          <div className="call-list">
+            {calls.map((call) => (
+              <div key={call.id} className="card" style={{ marginBottom: '8px' }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ marginBottom: '4px' }}>{call.body}</div>
+                  <div className="text-muted" style={{ fontSize: '0.85rem' }}>
+                    {call.member_name} - {formatRelativeTime(call.created_at)}
+                  </div>
+                </div>
+                <button
+                  className="btn-icon danger"
+                  onClick={() => handleDelete(call.id)}
+                  style={{ marginLeft: '8px' }}
+                >
+                  Delete
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }
