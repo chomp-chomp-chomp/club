@@ -5,6 +5,7 @@ import { api, urlBase64ToUint8Array } from '../lib/api';
 
 type Step = 'welcome' | 'install' | 'code' | 'notifications' | 'complete';
 type JoinMode = 'invite' | 'login';
+type LoginMethod = 'magic' | 'code';
 
 export default function Onboarding() {
   const navigate = useNavigate();
@@ -18,6 +19,8 @@ export default function Onboarding() {
   const [loading, setLoading] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
   const [magicLinkSent, setMagicLinkSent] = useState(false);
+  const [loginMethod, setLoginMethod] = useState<LoginMethod>('magic');
+  const [loginCode, setLoginCode] = useState('');
 
   useEffect(() => {
     // Check if running as installed PWA
@@ -76,6 +79,29 @@ export default function Onboarding() {
       setMagicLinkSent(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send login link');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLoginWithCode = async () => {
+    if (!loginCode.trim()) {
+      setError('Please enter your login code');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      await api('/api/auth/login-with-code', {
+        method: 'POST',
+        body: JSON.stringify({ code: loginCode.trim() }),
+      });
+      await refresh();
+      setStep('complete');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Invalid or expired code');
     } finally {
       setLoading(false);
     }
@@ -259,35 +285,82 @@ export default function Onboarding() {
             </>
           ) : (
             <>
-              {magicLinkSent ? (
-                <div className="card" style={{ textAlign: 'center', padding: '24px' }}>
-                  <div style={{ fontSize: '2rem', marginBottom: '16px' }}>Check your email</div>
-                  <p>If an account exists for <strong>{email}</strong>, we sent a login link.</p>
-                  <p style={{ marginTop: '12px', color: 'var(--color-text-muted)' }}>
-                    The link expires in 15 minutes.
-                  </p>
-                  <button
-                    className="btn btn-secondary"
-                    onClick={() => { setMagicLinkSent(false); setEmail(''); }}
-                    style={{ marginTop: '16px' }}
-                  >
-                    Try different email
-                  </button>
-                </div>
+              <div className="tabs" style={{ marginBottom: '16px' }}>
+                <button
+                  className={`tab ${loginMethod === 'magic' ? 'active' : ''}`}
+                  onClick={() => { setLoginMethod('magic'); setError(''); }}
+                >
+                  Magic Link
+                </button>
+                <button
+                  className={`tab ${loginMethod === 'code' ? 'active' : ''}`}
+                  onClick={() => { setLoginMethod('code'); setError(''); }}
+                >
+                  Login Code
+                </button>
+              </div>
+
+              {loginMethod === 'magic' ? (
+                magicLinkSent ? (
+                  <div className="card" style={{ textAlign: 'center', padding: '24px' }}>
+                    <div style={{ fontSize: '1.5rem', marginBottom: '16px' }}>Check your email</div>
+                    <p>If an account exists for <strong>{email}</strong>, we sent a login link.</p>
+                    <p style={{ marginTop: '12px', color: 'var(--color-text-muted)' }}>
+                      The link expires in 15 minutes.
+                    </p>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => { setMagicLinkSent(false); setEmail(''); }}
+                      style={{ marginTop: '16px' }}
+                    >
+                      Try different email
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="loginEmail">Email</label>
+                      <input
+                        id="loginEmail"
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="you@example.com"
+                        autoComplete="email"
+                      />
+                      <div className="form-hint">
+                        We'll send you a magic link to sign in
+                      </div>
+                    </div>
+
+                    {error && <div className="error-text" style={{ marginBottom: '16px' }}>{error}</div>}
+
+                    <button
+                      className="btn btn-primary btn-large"
+                      onClick={handleRequestMagicLink}
+                      disabled={loading || !email.trim()}
+                    >
+                      {loading ? 'Sending...' : 'Send Login Link'}
+                    </button>
+                  </>
+                )
               ) : (
                 <>
                   <div className="form-group">
-                    <label className="form-label" htmlFor="loginEmail">Email</label>
+                    <label className="form-label" htmlFor="loginCode">Login Code</label>
                     <input
-                      id="loginEmail"
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="you@example.com"
-                      autoComplete="email"
+                      id="loginCode"
+                      type="text"
+                      value={loginCode}
+                      onChange={(e) => setLoginCode(e.target.value.toUpperCase())}
+                      placeholder="ABC123"
+                      autoCapitalize="characters"
+                      autoComplete="off"
+                      style={{ textAlign: 'center', letterSpacing: '4px', fontSize: '1.5rem' }}
+                      maxLength={6}
                     />
                     <div className="form-hint">
-                      We'll send you a magic link to sign in
+                      Get this code from Settings on your logged-in device
                     </div>
                   </div>
 
@@ -295,10 +368,10 @@ export default function Onboarding() {
 
                   <button
                     className="btn btn-primary btn-large"
-                    onClick={handleRequestMagicLink}
-                    disabled={loading || !email.trim()}
+                    onClick={handleLoginWithCode}
+                    disabled={loading || loginCode.trim().length !== 6}
                   >
-                    {loading ? 'Sending...' : 'Send Login Link'}
+                    {loading ? 'Signing in...' : 'Sign In'}
                   </button>
                 </>
               )}

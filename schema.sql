@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS pulses (
   member_id TEXT,
   title TEXT NOT NULL,
   body TEXT,
+  url TEXT,
   recipe_slug TEXT,
   created_at TEXT NOT NULL
 );

@@ -17,6 +17,7 @@ export default function DropRecipe() {
   const [selectedRecipe, setSelectedRecipe] = useState<CachedRecipe | null>(null);
   const [customTitle, setCustomTitle] = useState('');
   const [customUrl, setCustomUrl] = useState('');
+  const [notes, setNotes] = useState('');
   const [dropping, setDropping] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [message, setMessage] = useState('');
@@ -52,18 +53,27 @@ export default function DropRecipe() {
       if (tab === 'catalog' && selectedRecipe) {
         await api('/api/admin/drop-recipe', {
           method: 'POST',
-          body: JSON.stringify({ recipe_slug: selectedRecipe.slug }),
+          body: JSON.stringify({
+            recipe_slug: selectedRecipe.slug,
+            notes: notes.trim() || undefined,
+          }),
         });
         setMessage(`Dropped: ${selectedRecipe.title}`);
         setSelectedRecipe(null);
-      } else if (tab === 'manual' && customTitle && customUrl) {
+        setNotes('');
+      } else if (tab === 'manual' && customTitle) {
         await api('/api/admin/drop-recipe', {
           method: 'POST',
-          body: JSON.stringify({ custom_title: customTitle, custom_url: customUrl }),
+          body: JSON.stringify({
+            custom_title: customTitle,
+            custom_url: customUrl || undefined,
+            notes: notes.trim() || undefined,
+          }),
         });
         setMessage(`Dropped: ${customTitle}`);
         setCustomTitle('');
         setCustomUrl('');
+        setNotes('');
       }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Failed to drop recipe');
@@ -147,6 +157,20 @@ export default function DropRecipe() {
               <h3>Selected Recipe</h3>
               <p><strong>{selectedRecipe.title}</strong></p>
               <p className="text-muted">{selectedRecipe.url}</p>
+
+              <div className="form-group" style={{ marginTop: '16px' }}>
+                <label className="form-label" htmlFor="catalogNotes">Notes (optional)</label>
+                <textarea
+                  id="catalogNotes"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="A quick note about this recipe..."
+                  rows={2}
+                  maxLength={500}
+                />
+                <div className="form-hint">{notes.length}/500</div>
+              </div>
+
               <button
                 className="btn btn-primary"
                 onClick={handleDrop}
@@ -175,7 +199,7 @@ export default function DropRecipe() {
           </div>
 
           <div className="form-group">
-            <label className="form-label" htmlFor="customUrl">Recipe URL</label>
+            <label className="form-label" htmlFor="customUrl">Recipe URL (optional)</label>
             <input
               id="customUrl"
               type="url"
@@ -185,10 +209,23 @@ export default function DropRecipe() {
             />
           </div>
 
+          <div className="form-group">
+            <label className="form-label" htmlFor="manualNotes">Notes (optional)</label>
+            <textarea
+              id="manualNotes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="A quick note about this recipe..."
+              rows={2}
+              maxLength={500}
+            />
+            <div className="form-hint">{notes.length}/500</div>
+          </div>
+
           <button
             className="btn btn-primary btn-large"
             onClick={handleDrop}
-            disabled={dropping || !customTitle.trim() || !customUrl.trim()}
+            disabled={dropping || !customTitle.trim()}
             style={{ width: '100%' }}
           >
             {dropping ? 'Dropping...' : 'Drop Recipe'}

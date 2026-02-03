@@ -368,13 +368,27 @@ export default function Shelf() {
                 {recipes.length > 0 && (
                   <div className="recipe-search-results">
                     {recipes.map((recipe) => (
-                      <button
+                      <div
                         key={recipe.slug}
-                        className="card recipe-select"
-                        onClick={() => addFromCache(recipe)}
+                        className="card"
+                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}
                       >
-                        {recipe.title}
-                      </button>
+                        <div style={{ flex: 1 }}>
+                          <div>{recipe.title}</div>
+                          {recipe.url && (
+                            <div className="text-muted" style={{ fontSize: '0.8rem', marginTop: '2px' }}>
+                              {recipe.url}
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          className="btn btn-primary"
+                          onClick={() => addFromCache(recipe)}
+                          style={{ marginLeft: '12px', whiteSpace: 'nowrap' }}
+                        >
+                          Add to Shelf
+                        </button>
+                      </div>
                     ))}
                   </div>
                 )}
