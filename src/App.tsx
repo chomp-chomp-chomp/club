@@ -16,6 +16,7 @@ import AdminShelf from './pages/admin/Shelf';
 import AdminMembers from './pages/admin/Members';
 import AdminBulletins from './pages/admin/Bulletins';
 import AdminInviteCodes from './pages/admin/InviteCodes';
+import MagicLink from './pages/MagicLink';
 import { initSoundHandler, addPendingSound } from './lib/sounds';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -50,6 +51,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/onboarding" element={<Onboarding />} />
+      <Route path="/magic" element={<MagicLink />} />
 
       <Route
         path="/"

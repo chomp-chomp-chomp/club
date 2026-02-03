@@ -127,18 +127,32 @@ app.get('/health', async (c) => {
 
 app.post('/auth/join', async (c) => {
   try {
-    const body = await c.req.json<{ invite_code: string; display_name: string }>();
-    const { invite_code, display_name } = body;
+    const body = await c.req.json<{ invite_code: string; display_name: string; email: string }>();
+    const { invite_code, display_name, email } = body;
 
-    if (!invite_code || !display_name) {
-      return c.json({ error: 'Invite code and display name required' }, 400);
+    if (!invite_code || !display_name || !email) {
+      return c.json({ error: 'Invite code, name, and email required' }, 400);
     }
 
     const code = invite_code.trim().toUpperCase();
     const name = display_name.trim().slice(0, 50);
+    const emailClean = email.trim().toLowerCase();
 
     if (name.length < 1) {
       return c.json({ error: 'Display name required' }, 400);
+    }
+
+    if (!emailClean.includes('@')) {
+      return c.json({ error: 'Valid email required' }, 400);
+    }
+
+    // Check if email already exists
+    const existingMember = await c.env.DB.prepare(
+      'SELECT id FROM members WHERE email = ? AND is_active = 1'
+    ).bind(emailClean).first();
+
+    if (existingMember) {
+      return c.json({ error: 'Email already registered. Use magic link to log in.' }, 400);
     }
 
     const inviteCode = await c.env.DB.prepare(
@@ -163,9 +177,9 @@ app.post('/auth/join', async (c) => {
     const now = new Date().toISOString();
 
     await c.env.DB.prepare(`
-      INSERT INTO members (id, display_name, invite_code_id, is_admin, is_active, created_at, last_seen_at)
-      VALUES (?, ?, ?, ?, 1, ?, ?)
-    `).bind(memberId, name, inviteCode.id, isFirstMember ? 1 : 0, now, now).run();
+      INSERT INTO members (id, display_name, email, invite_code_id, is_admin, is_active, created_at, last_seen_at)
+      VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+    `).bind(memberId, name, emailClean, inviteCode.id, isFirstMember ? 1 : 0, now, now).run();
 
     await c.env.DB.prepare(`
       INSERT INTO notification_prefs (id, member_id, bake_started, recipe_dropped, club_call)
@@ -194,6 +208,112 @@ app.post('/auth/join', async (c) => {
   } catch (err) {
     console.error('Join error:', err);
     return c.json({ error: 'Failed to join. Check D1 database bindings and schema.' }, 500);
+  }
+});
+
+// Request magic link for login
+app.post('/auth/magic-link', async (c) => {
+  try {
+    const body = await c.req.json<{ email: string }>();
+    const email = (body.email || '').trim().toLowerCase();
+
+    if (!email || !email.includes('@')) {
+      return c.json({ error: 'Valid email required' }, 400);
+    }
+
+    const member = await c.env.DB.prepare(
+      'SELECT id, display_name, is_admin FROM members WHERE email = ? AND is_active = 1'
+    ).bind(email).first<{ id: string; display_name: string; is_admin: number }>();
+
+    if (!member) {
+      // Don't reveal if email exists
+      return c.json({ success: true, message: 'If this email is registered, a login link will be sent.' });
+    }
+
+    // Generate magic link token
+    const token = generateSessionId();
+    await c.env.SESSIONS.put(`magic:${token}`, JSON.stringify({
+      memberId: member.id,
+      isAdmin: Boolean(member.is_admin),
+    }), { expirationTtl: 60 * 15 }); // 15 minutes
+
+    // Send email via Resend
+    const appUrl = c.env.APP_URL || 'https://club-chomp.pages.dev';
+    const magicUrl = `${appUrl}/magic?token=${token}`;
+
+    if (c.env.RESEND_API_KEY) {
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${c.env.RESEND_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: c.env.RESEND_FROM || 'Club Chomp <noreply@resend.dev>',
+          to: email,
+          subject: 'Your Club Chomp login link',
+          html: `
+            <h2>Welcome back, ${member.display_name}!</h2>
+            <p>Click the link below to log in to Club Chomp:</p>
+            <p><a href="${magicUrl}" style="display:inline-block;padding:12px 24px;background:#e73b42;color:white;text-decoration:none;border-radius:8px;">Log in to Club Chomp</a></p>
+            <p>Or copy this link: ${magicUrl}</p>
+            <p>This link expires in 15 minutes.</p>
+            <p>If you didn't request this, you can ignore this email.</p>
+          `,
+        }),
+      });
+
+      if (!response.ok) {
+        console.error('Resend error:', await response.text());
+        return c.json({ error: 'Failed to send email' }, 500);
+      }
+    }
+
+    return c.json({ success: true, message: 'If this email is registered, a login link will be sent.' });
+  } catch (err) {
+    console.error('Magic link error:', err);
+    return c.json({ error: 'Failed to send magic link' }, 500);
+  }
+});
+
+// Verify magic link token
+app.post('/auth/magic-verify', async (c) => {
+  try {
+    const body = await c.req.json<{ token: string }>();
+    const token = (body.token || '').trim();
+
+    if (!token) {
+      return c.json({ error: 'Token required' }, 400);
+    }
+
+    const data = await c.env.SESSIONS.get(`magic:${token}`, 'json') as { memberId: string; isAdmin: boolean } | null;
+
+    if (!data) {
+      return c.json({ error: 'Invalid or expired link' }, 400);
+    }
+
+    // Delete the magic token so it can't be reused
+    await c.env.SESSIONS.delete(`magic:${token}`);
+
+    // Create a new session
+    const sessionId = generateSessionId();
+    await c.env.SESSIONS.put(sessionId, JSON.stringify({
+      memberId: data.memberId,
+      isAdmin: data.isAdmin,
+    }), { expirationTtl: 60 * 60 * 24 * 30 });
+
+    setCookie(c, 'session', sessionId, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'Lax',
+      maxAge: 60 * 60 * 24 * 30,
+      path: '/',
+    });
+
+    return c.json({ success: true });
+  } catch (err) {
+    console.error('Magic verify error:', err);
+    return c.json({ error: 'Failed to verify link' }, 500);
   }
 });
 

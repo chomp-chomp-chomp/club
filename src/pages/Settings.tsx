@@ -232,7 +232,7 @@ export default function Settings() {
       <section className="section">
         <h2 className="section-title">Help</h2>
         <Link to="/about" className="card" style={{ display: 'block', textDecoration: 'none', color: 'inherit' }}>
-          <div className="card-title">About Chomp Club</div>
+          <div className="card-title">About Club Chomp</div>
           <div className="card-meta">How it works, troubleshooting</div>
         </Link>
       </section>

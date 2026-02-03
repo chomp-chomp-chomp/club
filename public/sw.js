@@ -1,5 +1,5 @@
 // Club Chomp Service Worker
-const CACHE_NAME = 'chomp-club-v1';
+const CACHE_NAME = 'club-chomp-v1';
 const APP_SHELL = [
   '/',
   '/manifest.json',

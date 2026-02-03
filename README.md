@@ -279,7 +279,7 @@ club/
 
 - Must be opened from Home Screen, not Safari
 - iOS 16.4+ required for Web Push
-- Check Settings → Notifications → Chomp Club
+- Check Settings → Notifications → Club Chomp
 - Try "Re-enable notifications" in Settings
 
 ---
