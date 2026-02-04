@@ -168,7 +168,9 @@ export default function App() {
       navigator.serviceWorker.addEventListener('message', (event) => {
         console.log('[App] SW message received:', event.data);
         if (event.data?.type === 'PENDING_SOUND' && event.data.sound) {
-          addPendingSound(event.data.sound);
+          // Try to play immediately (will store as pending if autoplay blocked)
+          unlockAudio();
+          playSound(event.data.sound);
         }
         if (event.data?.type === 'PLAY_SOUND' && event.data.sound) {
           unlockAudio();
