@@ -38,8 +38,8 @@ interface PushPayload {
 }
 
 // Web Push utilities
-function base64UrlEncode(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
+function base64UrlEncode(data: ArrayBuffer | Uint8Array): string {
+  const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
   let binary = '';
   for (let i = 0; i < bytes.length; i++) {
     binary += String.fromCharCode(bytes[i]);
@@ -58,6 +58,27 @@ function base64UrlDecode(str: string): Uint8Array {
   return bytes;
 }
 
+// Import raw EC private key (32 bytes) as JWK
+async function importVapidPrivateKey(publicKeyB64: string, privateKeyB64: string): Promise<CryptoKey> {
+  const publicKeyBytes = base64UrlDecode(publicKeyB64);
+  const privateKeyBytes = base64UrlDecode(privateKeyB64);
+
+  // Public key is 65 bytes: 0x04 + 32 bytes X + 32 bytes Y
+  const x = base64UrlEncode(publicKeyBytes.slice(1, 33));
+  const y = base64UrlEncode(publicKeyBytes.slice(33, 65));
+  const d = base64UrlEncode(privateKeyBytes);
+
+  const jwk = {
+    kty: 'EC',
+    crv: 'P-256',
+    x,
+    y,
+    d,
+  };
+
+  return crypto.subtle.importKey('jwk', jwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']);
+}
+
 async function createVapidJwt(
   endpoint: string,
   subject: string,
@@ -65,7 +86,7 @@ async function createVapidJwt(
   privateKey: string
 ): Promise<string> {
   const audience = new URL(endpoint).origin;
-  const expiry = Math.floor(Date.now() / 1000) + 12 * 60 * 60; // 12 hours
+  const expiry = Math.floor(Date.now() / 1000) + 12 * 60 * 60;
 
   const header = { typ: 'JWT', alg: 'ES256' };
   const payload = { aud: audience, exp: expiry, sub: subject };
@@ -74,36 +95,61 @@ async function createVapidJwt(
   const payloadB64 = base64UrlEncode(new TextEncoder().encode(JSON.stringify(payload)));
   const unsignedToken = `${headerB64}.${payloadB64}`;
 
-  // Import the private key
-  const privateKeyBytes = base64UrlDecode(privateKey);
-  const cryptoKey = await crypto.subtle.importKey(
-    'pkcs8',
-    privateKeyBytes,
-    { name: 'ECDSA', namedCurve: 'P-256' },
-    false,
-    ['sign']
-  );
+  const cryptoKey = await importVapidPrivateKey(publicKey, privateKey);
 
-  // Sign the token
-  const signature = await crypto.subtle.sign(
+  const signatureBuffer = await crypto.subtle.sign(
     { name: 'ECDSA', hash: 'SHA-256' },
     cryptoKey,
     new TextEncoder().encode(unsignedToken)
   );
 
-  // Convert signature from DER to raw format if needed
-  const signatureB64 = base64UrlEncode(signature);
-  return `${unsignedToken}.${signatureB64}`;
+  // Convert from DER to raw r||s format (64 bytes)
+  const signature = new Uint8Array(signatureBuffer);
+  let r: Uint8Array, s: Uint8Array;
+
+  if (signature.length === 64) {
+    // Already in raw format
+    r = signature.slice(0, 32);
+    s = signature.slice(32, 64);
+  } else {
+    // Assume DER format, extract r and s
+    r = signature.slice(0, 32);
+    s = signature.slice(32, 64);
+  }
+
+  const rawSig = new Uint8Array(64);
+  rawSig.set(r, 0);
+  rawSig.set(s, 32);
+
+  return `${unsignedToken}.${base64UrlEncode(rawSig)}`;
+}
+
+// HKDF implementation for Web Push
+async function hkdf(
+  salt: Uint8Array,
+  ikm: Uint8Array,
+  info: Uint8Array,
+  length: number
+): Promise<Uint8Array> {
+  const keyMaterial = await crypto.subtle.importKey('raw', ikm, 'HKDF', false, ['deriveBits']);
+
+  const derived = await crypto.subtle.deriveBits(
+    { name: 'HKDF', hash: 'SHA-256', salt, info },
+    keyMaterial,
+    length * 8
+  );
+
+  return new Uint8Array(derived);
 }
 
 async function encryptPayload(
   payload: string,
   p256dhKey: string,
   authSecret: string
-): Promise<{ encrypted: ArrayBuffer; salt: Uint8Array; localPublicKey: ArrayBuffer }> {
+): Promise<Uint8Array> {
   const salt = crypto.getRandomValues(new Uint8Array(16));
 
-  // Generate local key pair
+  // Generate local ECDH key pair
   const localKeyPair = await crypto.subtle.generateKey(
     { name: 'ECDH', namedCurve: 'P-256' },
     true,
@@ -111,61 +157,86 @@ async function encryptPayload(
   );
 
   // Import subscriber's public key
-  const subscriberPublicKeyBytes = base64UrlDecode(p256dhKey);
-  const subscriberPublicKey = await crypto.subtle.importKey(
+  const subscriberPubKeyBytes = base64UrlDecode(p256dhKey);
+  const subscriberPubKey = await crypto.subtle.importKey(
     'raw',
-    subscriberPublicKeyBytes,
+    subscriberPubKeyBytes,
     { name: 'ECDH', namedCurve: 'P-256' },
     false,
     []
   );
 
   // Derive shared secret
-  const sharedSecret = await crypto.subtle.deriveBits(
-    { name: 'ECDH', public: subscriberPublicKey },
+  const sharedSecretBits = await crypto.subtle.deriveBits(
+    { name: 'ECDH', public: subscriberPubKey },
     localKeyPair.privateKey,
     256
   );
+  const sharedSecret = new Uint8Array(sharedSecretBits);
 
   // Export local public key
-  const localPublicKey = await crypto.subtle.exportKey('raw', localKeyPair.publicKey);
+  const localPubKeyBuffer = await crypto.subtle.exportKey('raw', localKeyPair.publicKey);
+  const localPubKey = new Uint8Array(localPubKeyBuffer);
 
-  // Get auth secret
   const authSecretBytes = base64UrlDecode(authSecret);
 
-  // Derive encryption key using HKDF
-  const ikm = new Uint8Array(sharedSecret);
-  const info = new TextEncoder().encode('Content-Encoding: aes128gcm\0');
+  // Create info for key derivation
+  const keyInfoBuf = new Uint8Array([
+    ...new TextEncoder().encode('WebPush: info\0'),
+    ...subscriberPubKeyBytes,
+    ...localPubKey,
+  ]);
 
-  // Simple HKDF implementation for key derivation
-  const prk = await crypto.subtle.importKey('raw', ikm, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  const prkSigned = await crypto.subtle.sign('HMAC', prk, new Uint8Array([...authSecretBytes, ...salt]));
+  // Derive IKM
+  const ikm = await hkdf(authSecretBytes, sharedSecret, keyInfoBuf, 32);
 
-  const keyInfo = new Uint8Array([...new TextEncoder().encode('Content-Encoding: aes128gcm\0'), 1]);
-  const keyMaterial = await crypto.subtle.importKey('raw', prkSigned, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  const contentKey = (await crypto.subtle.sign('HMAC', keyMaterial, keyInfo)).slice(0, 16);
+  // Derive content encryption key and nonce
+  const keyInfo = new TextEncoder().encode('Content-Encoding: aes128gcm\0');
+  const nonceInfo = new TextEncoder().encode('Content-Encoding: nonce\0');
 
-  const nonceInfo = new Uint8Array([...new TextEncoder().encode('Content-Encoding: nonce\0'), 1]);
-  const nonceMaterial = await crypto.subtle.importKey('raw', prkSigned, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  const nonce = (await crypto.subtle.sign('HMAC', nonceMaterial, nonceInfo)).slice(0, 12);
+  const contentKey = await hkdf(salt, ikm, keyInfo, 16);
+  const nonce = await hkdf(salt, ikm, nonceInfo, 12);
 
-  // Encrypt the payload
-  const aesKey = await crypto.subtle.importKey('raw', contentKey, { name: 'AES-GCM' }, false, ['encrypt']);
+  // Import AES key
+  const aesKey = await crypto.subtle.importKey('raw', contentKey, 'AES-GCM', false, ['encrypt']);
 
-  // Add padding
+  // Prepare payload with padding
   const payloadBytes = new TextEncoder().encode(payload);
-  const paddedPayload = new Uint8Array(payloadBytes.length + 2);
+  const paddedPayload = new Uint8Array(payloadBytes.length + 1);
   paddedPayload.set(payloadBytes);
   paddedPayload[payloadBytes.length] = 2; // Delimiter
-  paddedPayload[payloadBytes.length + 1] = 0; // Padding
 
-  const encrypted = await crypto.subtle.encrypt(
+  // Encrypt
+  const ciphertext = await crypto.subtle.encrypt(
     { name: 'AES-GCM', iv: nonce },
     aesKey,
     paddedPayload
   );
 
-  return { encrypted, salt, localPublicKey };
+  // Build the encrypted content (aes128gcm format)
+  const recordSize = 4096;
+  const result = new Uint8Array(16 + 4 + 1 + 65 + ciphertext.byteLength);
+  let offset = 0;
+
+  // Salt (16 bytes)
+  result.set(salt, offset);
+  offset += 16;
+
+  // Record size (4 bytes, big-endian)
+  result[offset++] = (recordSize >> 24) & 0xff;
+  result[offset++] = (recordSize >> 16) & 0xff;
+  result[offset++] = (recordSize >> 8) & 0xff;
+  result[offset++] = recordSize & 0xff;
+
+  // Key ID length (1 byte) + Key ID (local public key)
+  result[offset++] = 65;
+  result.set(localPubKey, offset);
+  offset += 65;
+
+  // Ciphertext
+  result.set(new Uint8Array(ciphertext), offset);
+
+  return result;
 }
 
 async function sendPushNotification(
@@ -176,8 +247,14 @@ async function sendPushNotification(
   try {
     const payloadString = JSON.stringify(payload);
 
-    // For now, use a simpler approach - just send the notification without encryption
-    // Many push services accept unencrypted payloads for testing
+    // Encrypt the payload
+    const encryptedPayload = await encryptPayload(
+      payloadString,
+      subscription.p256dh,
+      subscription.auth
+    );
+
+    // Create VAPID JWT
     const jwt = await createVapidJwt(
       subscription.endpoint,
       env.VAPID_SUBJECT,
@@ -189,10 +266,11 @@ async function sendPushNotification(
       method: 'POST',
       headers: {
         'Authorization': `vapid t=${jwt}, k=${env.VAPID_PUBLIC_KEY}`,
+        'Content-Encoding': 'aes128gcm',
         'Content-Type': 'application/octet-stream',
         'TTL': '86400',
       },
-      body: payloadString,
+      body: encryptedPayload,
     });
 
     if (response.status === 410 || response.status === 404) {
@@ -200,6 +278,10 @@ async function sendPushNotification(
       await env.DB.prepare('DELETE FROM push_subscriptions WHERE id = ?')
         .bind(subscription.id).run();
       return false;
+    }
+
+    if (!response.ok) {
+      console.error('Push failed:', response.status, await response.text());
     }
 
     return response.ok;
@@ -216,12 +298,17 @@ async function sendPushToMembers(
   excludeMemberId?: string
 ): Promise<{ sent: number; failed: number }> {
   // Get all subscriptions for members who have this notification type enabled
-  const subscriptions = await env.DB.prepare(`
-    SELECT ps.* FROM push_subscriptions ps
-    JOIN notification_prefs np ON np.member_id = ps.member_id
-    WHERE np.${notificationType} = 1
-    ${excludeMemberId ? 'AND ps.member_id != ?' : ''}
-  `).bind(...(excludeMemberId ? [excludeMemberId] : [])).all<PushSubscription>();
+  const query = excludeMemberId
+    ? `SELECT ps.* FROM push_subscriptions ps
+       JOIN notification_prefs np ON np.member_id = ps.member_id
+       WHERE np.${notificationType} = 1 AND ps.member_id != ?`
+    : `SELECT ps.* FROM push_subscriptions ps
+       JOIN notification_prefs np ON np.member_id = ps.member_id
+       WHERE np.${notificationType} = 1`;
+
+  const subscriptions = excludeMemberId
+    ? await env.DB.prepare(query).bind(excludeMemberId).all<PushSubscription>()
+    : await env.DB.prepare(query).all<PushSubscription>();
 
   let sent = 0;
   let failed = 0;
