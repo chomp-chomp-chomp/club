@@ -18,7 +18,7 @@ import AdminBulletins from './pages/admin/Bulletins';
 import AdminInviteCodes from './pages/admin/InviteCodes';
 import AdminActivity from './pages/admin/Activity';
 import MagicLink from './pages/MagicLink';
-import { initSoundHandler, addPendingSound, playSound } from './lib/sounds';
+import { initSoundHandler, addPendingSound, playSound, unlockAudio } from './lib/sounds';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { member, loading } = useAuth();
@@ -147,10 +147,14 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     const soundParam = params.get('sound');
     if (soundParam && ['club_call', 'recipe_dropped', 'bake_started'].includes(soundParam)) {
-      // Small delay to ensure audio context is ready
+      console.log('[App] Sound param detected:', soundParam);
+      // Store as pending - will play on first interaction
+      addPendingSound(soundParam as 'club_call' | 'recipe_dropped' | 'bake_started');
+      // Also try immediate play (may work if we have gesture context)
       setTimeout(() => {
+        unlockAudio();
         playSound(soundParam as 'club_call' | 'recipe_dropped' | 'bake_started');
-      }, 300);
+      }, 100);
       // Clean up URL
       params.delete('sound');
       const newUrl = params.toString()
@@ -162,10 +166,12 @@ export default function App() {
     // Listen for service worker messages
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.addEventListener('message', (event) => {
+        console.log('[App] SW message received:', event.data);
         if (event.data?.type === 'PENDING_SOUND' && event.data.sound) {
           addPendingSound(event.data.sound);
         }
         if (event.data?.type === 'PLAY_SOUND' && event.data.sound) {
+          unlockAudio();
           playSound(event.data.sound);
         }
       });
