@@ -37,11 +37,14 @@ export default function ClubCall() {
     setSending(true);
     setResult('');
     try {
-      await api<{ pulse: object }>('/api/admin/club-call', {
+      const response = await api<{ pulse: object; push: { sent: number; failed: number } }>('/api/admin/club-call', {
         method: 'POST',
         body: JSON.stringify({ message: message.trim() }),
       });
-      setResult('Club call sent!');
+      const pushInfo = response.push
+        ? ` (${response.push.sent} notifications sent${response.push.failed ? `, ${response.push.failed} failed` : ''})`
+        : '';
+      setResult(`Club call sent!${pushInfo}`);
       setMessage('');
       await loadCalls();
     } catch (error) {

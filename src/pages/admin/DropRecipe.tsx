@@ -72,20 +72,22 @@ export default function DropRecipe() {
     setDropping(true);
     setMessage('');
     try {
+      let response: { pulse: object; push?: { sent: number; failed: number } };
+      let title: string;
+
       if (tab === 'catalog' && selectedRecipe) {
-        await api('/api/admin/drop-recipe', {
+        response = await api('/api/admin/drop-recipe', {
           method: 'POST',
           body: JSON.stringify({
             recipe_slug: selectedRecipe.slug,
             notes: notes.trim() || undefined,
           }),
         });
-        setMessage(`Dropped: ${selectedRecipe.title}`);
+        title = selectedRecipe.title;
         setSelectedRecipe(null);
         setNotes('');
-        await loadRecentDrops();
       } else if (tab === 'manual' && customTitle) {
-        await api('/api/admin/drop-recipe', {
+        response = await api('/api/admin/drop-recipe', {
           method: 'POST',
           body: JSON.stringify({
             custom_title: customTitle,
@@ -93,12 +95,19 @@ export default function DropRecipe() {
             notes: notes.trim() || undefined,
           }),
         });
-        setMessage(`Dropped: ${customTitle}`);
+        title = customTitle;
         setCustomTitle('');
         setCustomUrl('');
         setNotes('');
-        await loadRecentDrops();
+      } else {
+        return;
       }
+
+      const pushInfo = response.push
+        ? ` (${response.push.sent} notifications sent${response.push.failed ? `, ${response.push.failed} failed` : ''})`
+        : '';
+      setMessage(`Dropped: ${title}${pushInfo}`);
+      await loadRecentDrops();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Failed to drop recipe');
     } finally {
