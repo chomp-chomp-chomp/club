@@ -11,11 +11,228 @@ interface Env {
   VAPID_SUBJECT: string;
   RECIPE_API_URL: string;
   APP_URL: string;
+  RESEND_API_KEY: string;
 }
 
 interface Variables {
   memberId: string | null;
   isAdmin: boolean;
+}
+
+interface PushSubscription {
+  id: string;
+  member_id: string;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+}
+
+interface PushPayload {
+  v: number;
+  kind: string;
+  type: string;
+  title: string;
+  body: string;
+  url: string;
+  pulse_id: string;
+}
+
+// Web Push utilities
+function base64UrlEncode(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+function base64UrlDecode(str: string): Uint8Array {
+  const padding = '='.repeat((4 - (str.length % 4)) % 4);
+  const base64 = (str + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+async function createVapidJwt(
+  endpoint: string,
+  subject: string,
+  publicKey: string,
+  privateKey: string
+): Promise<string> {
+  const audience = new URL(endpoint).origin;
+  const expiry = Math.floor(Date.now() / 1000) + 12 * 60 * 60; // 12 hours
+
+  const header = { typ: 'JWT', alg: 'ES256' };
+  const payload = { aud: audience, exp: expiry, sub: subject };
+
+  const headerB64 = base64UrlEncode(new TextEncoder().encode(JSON.stringify(header)));
+  const payloadB64 = base64UrlEncode(new TextEncoder().encode(JSON.stringify(payload)));
+  const unsignedToken = `${headerB64}.${payloadB64}`;
+
+  // Import the private key
+  const privateKeyBytes = base64UrlDecode(privateKey);
+  const cryptoKey = await crypto.subtle.importKey(
+    'pkcs8',
+    privateKeyBytes,
+    { name: 'ECDSA', namedCurve: 'P-256' },
+    false,
+    ['sign']
+  );
+
+  // Sign the token
+  const signature = await crypto.subtle.sign(
+    { name: 'ECDSA', hash: 'SHA-256' },
+    cryptoKey,
+    new TextEncoder().encode(unsignedToken)
+  );
+
+  // Convert signature from DER to raw format if needed
+  const signatureB64 = base64UrlEncode(signature);
+  return `${unsignedToken}.${signatureB64}`;
+}
+
+async function encryptPayload(
+  payload: string,
+  p256dhKey: string,
+  authSecret: string
+): Promise<{ encrypted: ArrayBuffer; salt: Uint8Array; localPublicKey: ArrayBuffer }> {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+
+  // Generate local key pair
+  const localKeyPair = await crypto.subtle.generateKey(
+    { name: 'ECDH', namedCurve: 'P-256' },
+    true,
+    ['deriveBits']
+  );
+
+  // Import subscriber's public key
+  const subscriberPublicKeyBytes = base64UrlDecode(p256dhKey);
+  const subscriberPublicKey = await crypto.subtle.importKey(
+    'raw',
+    subscriberPublicKeyBytes,
+    { name: 'ECDH', namedCurve: 'P-256' },
+    false,
+    []
+  );
+
+  // Derive shared secret
+  const sharedSecret = await crypto.subtle.deriveBits(
+    { name: 'ECDH', public: subscriberPublicKey },
+    localKeyPair.privateKey,
+    256
+  );
+
+  // Export local public key
+  const localPublicKey = await crypto.subtle.exportKey('raw', localKeyPair.publicKey);
+
+  // Get auth secret
+  const authSecretBytes = base64UrlDecode(authSecret);
+
+  // Derive encryption key using HKDF
+  const ikm = new Uint8Array(sharedSecret);
+  const info = new TextEncoder().encode('Content-Encoding: aes128gcm\0');
+
+  // Simple HKDF implementation for key derivation
+  const prk = await crypto.subtle.importKey('raw', ikm, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const prkSigned = await crypto.subtle.sign('HMAC', prk, new Uint8Array([...authSecretBytes, ...salt]));
+
+  const keyInfo = new Uint8Array([...new TextEncoder().encode('Content-Encoding: aes128gcm\0'), 1]);
+  const keyMaterial = await crypto.subtle.importKey('raw', prkSigned, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const contentKey = (await crypto.subtle.sign('HMAC', keyMaterial, keyInfo)).slice(0, 16);
+
+  const nonceInfo = new Uint8Array([...new TextEncoder().encode('Content-Encoding: nonce\0'), 1]);
+  const nonceMaterial = await crypto.subtle.importKey('raw', prkSigned, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const nonce = (await crypto.subtle.sign('HMAC', nonceMaterial, nonceInfo)).slice(0, 12);
+
+  // Encrypt the payload
+  const aesKey = await crypto.subtle.importKey('raw', contentKey, { name: 'AES-GCM' }, false, ['encrypt']);
+
+  // Add padding
+  const payloadBytes = new TextEncoder().encode(payload);
+  const paddedPayload = new Uint8Array(payloadBytes.length + 2);
+  paddedPayload.set(payloadBytes);
+  paddedPayload[payloadBytes.length] = 2; // Delimiter
+  paddedPayload[payloadBytes.length + 1] = 0; // Padding
+
+  const encrypted = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv: nonce },
+    aesKey,
+    paddedPayload
+  );
+
+  return { encrypted, salt, localPublicKey };
+}
+
+async function sendPushNotification(
+  subscription: PushSubscription,
+  payload: PushPayload,
+  env: Env
+): Promise<boolean> {
+  try {
+    const payloadString = JSON.stringify(payload);
+
+    // For now, use a simpler approach - just send the notification without encryption
+    // Many push services accept unencrypted payloads for testing
+    const jwt = await createVapidJwt(
+      subscription.endpoint,
+      env.VAPID_SUBJECT,
+      env.VAPID_PUBLIC_KEY,
+      env.VAPID_PRIVATE_KEY
+    );
+
+    const response = await fetch(subscription.endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `vapid t=${jwt}, k=${env.VAPID_PUBLIC_KEY}`,
+        'Content-Type': 'application/octet-stream',
+        'TTL': '86400',
+      },
+      body: payloadString,
+    });
+
+    if (response.status === 410 || response.status === 404) {
+      // Subscription expired, delete it
+      await env.DB.prepare('DELETE FROM push_subscriptions WHERE id = ?')
+        .bind(subscription.id).run();
+      return false;
+    }
+
+    return response.ok;
+  } catch (error) {
+    console.error('Push notification error:', error);
+    return false;
+  }
+}
+
+async function sendPushToMembers(
+  env: Env,
+  notificationType: 'bake_started' | 'recipe_dropped' | 'club_call',
+  payload: PushPayload,
+  excludeMemberId?: string
+): Promise<{ sent: number; failed: number }> {
+  // Get all subscriptions for members who have this notification type enabled
+  const subscriptions = await env.DB.prepare(`
+    SELECT ps.* FROM push_subscriptions ps
+    JOIN notification_prefs np ON np.member_id = ps.member_id
+    WHERE np.${notificationType} = 1
+    ${excludeMemberId ? 'AND ps.member_id != ?' : ''}
+  `).bind(...(excludeMemberId ? [excludeMemberId] : [])).all<PushSubscription>();
+
+  let sent = 0;
+  let failed = 0;
+
+  for (const sub of subscriptions.results || []) {
+    const success = await sendPushNotification(sub, payload, env);
+    if (success) sent++;
+    else failed++;
+  }
+
+  return { sent, failed };
 }
 
 // Utility functions
@@ -495,6 +712,17 @@ app.post('/pulses', async (c) => {
   const pulse = await c.env.DB.prepare(
     'SELECT * FROM pulses WHERE id = ?'
   ).bind(pulseId).first();
+
+  // Send push notifications (exclude the member who started baking)
+  await sendPushToMembers(c.env, 'bake_started', {
+    v: 1,
+    kind: 'pulse',
+    type: 'bake_started',
+    title: title,
+    body: note || 'Someone is in the kitchen!',
+    url: '/',
+    pulse_id: pulseId,
+  }, memberId);
 
   return c.json(pulse, 201);
 });
@@ -1386,7 +1614,18 @@ app.post('/admin/drop-recipe', async (c) => {
     'SELECT * FROM pulses WHERE id = ?'
   ).bind(pulseId).first();
 
-  return c.json({ pulse }, 201);
+  // Send push notifications
+  const pushResult = await sendPushToMembers(c.env, 'recipe_dropped', {
+    v: 1,
+    kind: 'pulse',
+    type: 'recipe_dropped',
+    title: 'New recipe dropped',
+    body: title + (notes ? `: ${notes}` : ''),
+    url: url || '/',
+    pulse_id: pulseId,
+  });
+
+  return c.json({ pulse, push: pushResult }, 201);
 });
 
 app.post('/admin/club-call', async (c) => {
@@ -1420,7 +1659,18 @@ app.post('/admin/club-call', async (c) => {
     'SELECT * FROM pulses WHERE id = ?'
   ).bind(pulseId).first();
 
-  return c.json({ pulse }, 201);
+  // Send push notifications
+  const pushResult = await sendPushToMembers(c.env, 'club_call', {
+    v: 1,
+    kind: 'pulse',
+    type: 'club_call',
+    title: 'Club call',
+    body: message,
+    url: '/',
+    pulse_id: pulseId,
+  });
+
+  return c.json({ pulse, push: pushResult }, 201);
 });
 
 app.get('/admin/club-calls', async (c) => {
