@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
 CREATE TABLE IF NOT EXISTS notification_prefs (
   id TEXT PRIMARY KEY,
   member_id TEXT UNIQUE NOT NULL,
-  bake_started INTEGER DEFAULT 0,
+  bake_started INTEGER DEFAULT 1,
   recipe_dropped INTEGER DEFAULT 1,
   club_call INTEGER DEFAULT 1
 );

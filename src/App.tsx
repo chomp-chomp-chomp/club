@@ -18,7 +18,7 @@ import AdminBulletins from './pages/admin/Bulletins';
 import AdminInviteCodes from './pages/admin/InviteCodes';
 import AdminActivity from './pages/admin/Activity';
 import MagicLink from './pages/MagicLink';
-import { initSoundHandler, addPendingSound } from './lib/sounds';
+import { initSoundHandler, addPendingSound, playSound } from './lib/sounds';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { member, loading } = useAuth();
@@ -143,11 +143,30 @@ export default function App() {
     // Initialize sound handler
     initSoundHandler();
 
-    // Listen for service worker messages about pending sounds
+    // Check for sound parameter in URL (from notification click)
+    const params = new URLSearchParams(window.location.search);
+    const soundParam = params.get('sound');
+    if (soundParam && ['club_call', 'recipe_dropped', 'bake_started'].includes(soundParam)) {
+      // Small delay to ensure audio context is ready
+      setTimeout(() => {
+        playSound(soundParam as 'club_call' | 'recipe_dropped' | 'bake_started');
+      }, 300);
+      // Clean up URL
+      params.delete('sound');
+      const newUrl = params.toString()
+        ? `${window.location.pathname}?${params.toString()}`
+        : window.location.pathname;
+      window.history.replaceState({}, '', newUrl);
+    }
+
+    // Listen for service worker messages
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.addEventListener('message', (event) => {
         if (event.data?.type === 'PENDING_SOUND' && event.data.sound) {
           addPendingSound(event.data.sound);
+        }
+        if (event.data?.type === 'PLAY_SOUND' && event.data.sound) {
+          playSound(event.data.sound);
         }
       });
     }

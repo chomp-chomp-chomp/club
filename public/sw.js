@@ -106,11 +106,12 @@ async function notifyClientsOfSound(type) {
   }
 }
 
-// Notification click - open app
+// Notification click - open app and trigger sound
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
   const url = event.notification.data?.url || '/';
+  const pulseType = event.notification.data?.pulse_type;
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
@@ -118,13 +119,18 @@ self.addEventListener('notificationclick', (event) => {
       for (const client of clients) {
         if (client.url.includes(self.location.origin) && 'focus' in client) {
           client.focus();
+          // Send sound type to play
+          if (pulseType) {
+            client.postMessage({ type: 'PLAY_SOUND', sound: pulseType });
+          }
           client.navigate(url);
           return;
         }
       }
-      // Open new window
+      // Open new window with sound parameter
       if (self.clients.openWindow) {
-        return self.clients.openWindow(url);
+        const soundParam = pulseType ? `?sound=${pulseType}` : '';
+        return self.clients.openWindow(url + soundParam);
       }
     })
   );

@@ -12,7 +12,7 @@ export default function Settings() {
   const [generatingCode, setGeneratingCode] = useState(false);
 
   const prefs = member?.notification_prefs || {
-    bake_started: false,
+    bake_started: true,
     recipe_dropped: true,
     club_call: true,
   };
