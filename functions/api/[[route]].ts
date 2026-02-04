@@ -506,7 +506,7 @@ app.post('/auth/join', async (c) => {
 
     await c.env.DB.prepare(`
       INSERT INTO notification_prefs (id, member_id, bake_started, recipe_dropped, club_call)
-      VALUES (?, ?, 0, 1, 1)
+      VALUES (?, ?, 1, 1, 1)
     `).bind(generateId(), memberId).run();
 
     await c.env.DB.prepare(
@@ -1349,7 +1349,7 @@ app.get('/notifications/prefs', async (c) => {
 
   if (!prefs) {
     return c.json({
-      bake_started: false,
+      bake_started: true,
       recipe_dropped: true,
       club_call: true,
     });
