@@ -100,7 +100,7 @@ self.addEventListener('push', (event) => {
 // Notify clients to store pending sound
 async function notifyClientsOfSound(type) {
   if (!type) return;
-  const clients = await self.clients.matchAll({ type: 'window' });
+  const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
   for (const client of clients) {
     client.postMessage({ type: 'PENDING_SOUND', sound: type });
   }
