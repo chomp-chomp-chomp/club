@@ -18,7 +18,7 @@ import AdminBulletins from './pages/admin/Bulletins';
 import AdminInviteCodes from './pages/admin/InviteCodes';
 import AdminActivity from './pages/admin/Activity';
 import MagicLink from './pages/MagicLink';
-import { initSoundHandler, addPendingSound, playSound, unlockAudio } from './lib/sounds';
+import { initSoundHandler, addPendingSound, playSound } from './lib/sounds';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { member, loading } = useAuth();
@@ -140,7 +140,7 @@ function AppRoutes() {
 
 export default function App() {
   useEffect(() => {
-    // Initialize sound handler
+    // Initialize sound handler (preloads sounds)
     initSoundHandler();
 
     // Check for sound parameter in URL (from notification click)
@@ -148,11 +148,8 @@ export default function App() {
     const soundParam = params.get('sound');
     if (soundParam && ['club_call', 'recipe_dropped', 'bake_started'].includes(soundParam)) {
       console.log('[App] Sound param detected:', soundParam);
-      // Store as pending - will play on first interaction
-      addPendingSound(soundParam as 'club_call' | 'recipe_dropped' | 'bake_started');
-      // Also try immediate play (may work if we have gesture context)
+      // Try immediate play, will store as pending if blocked
       setTimeout(() => {
-        unlockAudio();
         playSound(soundParam as 'club_call' | 'recipe_dropped' | 'bake_started');
       }, 100);
       // Clean up URL
@@ -163,14 +160,11 @@ export default function App() {
       window.history.replaceState({}, '', newUrl);
     }
 
-    // Listen for service worker messages
+    // Listen for service worker messages (like cooling app)
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.addEventListener('message', (event) => {
         console.log('[App] SW message received:', event.data);
-        // Both PENDING_SOUND and PLAY_SOUND trigger immediate playback
-        // (will store as pending if autoplay is blocked)
         if ((event.data?.type === 'PENDING_SOUND' || event.data?.type === 'PLAY_SOUND') && event.data.sound) {
-          unlockAudio();
           playSound(event.data.sound);
         }
       });

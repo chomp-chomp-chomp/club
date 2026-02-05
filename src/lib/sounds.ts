@@ -1,4 +1,5 @@
 // Sound utility for playing notification sounds
+// Simplified approach matching cooling app
 
 const SOUNDS = {
   club_call: '/sounds/club_call.mp3',
@@ -8,41 +9,45 @@ const SOUNDS = {
 
 type SoundType = keyof typeof SOUNDS;
 
-// Store for pending sounds (unplayed notifications)
+// Preloaded audio elements (like cooling app)
+const audioElements: Partial<Record<SoundType, HTMLAudioElement>> = {};
+
+// Preload all sounds on init
+export function preloadSounds(): void {
+  (Object.keys(SOUNDS) as SoundType[]).forEach(type => {
+    const audio = new Audio(SOUNDS[type]);
+    audio.preload = 'auto';
+    audio.volume = 0.5;
+    audioElements[type] = audio;
+  });
+  console.log('[sounds] Preloaded all sounds');
+}
+
+// Play a sound (simple approach from cooling app)
+export function playSound(type: SoundType): void {
+  const audio = audioElements[type];
+  if (!audio) {
+    console.warn('[sounds] Audio not preloaded:', type);
+    return;
+  }
+
+  console.log('[sounds] Playing:', type);
+  try {
+    audio.currentTime = 0;
+    audio.play().catch(() => {
+      // Autoplay may be blocked, store as pending
+      console.log('[sounds] Autoplay blocked, storing pending:', type);
+      addPendingSound(type);
+    });
+  } catch (e) {
+    console.warn('[sounds] Play error:', e);
+  }
+}
+
+// Pending sounds storage (fallback for autoplay blocked)
 const PENDING_KEY = 'chomp_pending_sounds';
 
-// Audio context for PWA compatibility
-let audioContext: AudioContext | null = null;
-let audioUnlocked = false;
-
-function getAudioContext(): AudioContext {
-  if (!audioContext) {
-    audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-  }
-  return audioContext;
-}
-
-// Unlock audio on first user interaction (required for iOS PWA)
-export function unlockAudio(): void {
-  if (audioUnlocked) return;
-
-  const ctx = getAudioContext();
-  if (ctx.state === 'suspended') {
-    ctx.resume();
-  }
-
-  // Play a silent buffer to unlock
-  const buffer = ctx.createBuffer(1, 1, 22050);
-  const source = ctx.createBufferSource();
-  source.buffer = buffer;
-  source.connect(ctx.destination);
-  source.start(0);
-
-  audioUnlocked = true;
-  console.log('[sounds] Audio unlocked');
-}
-
-export function getPendingSounds(): SoundType[] {
+function getPendingSounds(): SoundType[] {
   try {
     const stored = localStorage.getItem(PENDING_KEY);
     return stored ? JSON.parse(stored) : [];
@@ -57,14 +62,13 @@ export function addPendingSound(type: SoundType): void {
     if (!pending.includes(type)) {
       pending.push(type);
       localStorage.setItem(PENDING_KEY, JSON.stringify(pending));
-      console.log('[sounds] Added pending sound:', type);
     }
   } catch {
     // Ignore errors
   }
 }
 
-export function clearPendingSounds(): void {
+function clearPendingSounds(): void {
   try {
     localStorage.removeItem(PENDING_KEY);
   } catch {
@@ -72,75 +76,36 @@ export function clearPendingSounds(): void {
   }
 }
 
-export async function playSound(type: SoundType): Promise<void> {
-  const src = SOUNDS[type];
-  if (!src) return;
-
-  console.log('[sounds] Attempting to play:', type);
-
-  try {
-    // Ensure audio context is running
-    const ctx = getAudioContext();
-    if (ctx.state === 'suspended') {
-      await ctx.resume();
-    }
-
-    const audio = new Audio(src);
-    audio.volume = 0.5;
-    await audio.play();
-    console.log('[sounds] Played successfully:', type);
-  } catch (err) {
-    console.warn('[sounds] Could not play sound:', err);
-    // Store as pending if autoplay was blocked
-    if (err instanceof Error && err.name === 'NotAllowedError') {
-      addPendingSound(type);
-    }
-  }
-}
-
-export async function playPendingSounds(): Promise<void> {
+export function playPendingSounds(): void {
   const pending = getPendingSounds();
   if (pending.length === 0) return;
 
   console.log('[sounds] Playing pending sounds:', pending);
 
-  // Play the most important sound (priority: club_call > recipe_dropped > bake_started)
+  // Play highest priority sound
   const priority: SoundType[] = ['club_call', 'recipe_dropped', 'bake_started'];
   const toPlay = priority.find(type => pending.includes(type));
 
   if (toPlay) {
-    await playSound(toPlay);
+    playSound(toPlay);
   }
 
   clearPendingSounds();
 }
 
+// Initialize sound handler
 export function initSoundHandler(): void {
-  // Unlock audio on any user interaction
-  const unlockEvents = ['touchstart', 'touchend', 'click', 'keydown'];
-  const handleUnlock = () => {
-    unlockAudio();
-    // Also try to play pending sounds on interaction
+  // Preload sounds immediately
+  preloadSounds();
+
+  // Play pending sounds on user interaction
+  const handleInteraction = () => {
     playPendingSounds();
   };
 
-  unlockEvents.forEach(event => {
-    document.addEventListener(event, handleUnlock, { once: false, passive: true });
+  ['touchstart', 'touchend', 'click'].forEach(event => {
+    document.addEventListener(event, handleInteraction, { passive: true });
   });
-
-  // Check for pending sounds on visibility change
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
-      console.log('[sounds] App became visible, checking pending sounds');
-      // Try to play, will be stored again if blocked
-      setTimeout(() => playPendingSounds(), 300);
-    }
-  });
-
-  // Check on initial load
-  if (document.visibilityState === 'visible') {
-    setTimeout(() => playPendingSounds(), 500);
-  }
 
   console.log('[sounds] Sound handler initialized');
 }
